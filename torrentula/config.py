@@ -1,0 +1,7 @@
+APP_NAME = "Torrentula"
+REQUEST_BLOCK_SIZE = 2**14  # Bytes
+MAX_BLOCK_SIZE = 2**17
+MIN_PIECE_SIZE = 2**18
+VERSION = "1.0.0"
+LOG_FILENAME = f"{APP_NAME.lower()}.log"
+LOG_DIRECTORY = "logs"

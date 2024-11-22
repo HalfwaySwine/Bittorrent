@@ -14,3 +14,6 @@
 !.vscode/extensions.json
 !.vscode/*.code-snippets
 .history
+
+*__pycache__
+*.log
