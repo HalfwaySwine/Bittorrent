@@ -4,6 +4,7 @@ class Tracker:
     """
     def __init__(self, url):
         self.url
+    
     def connect():
         pass
     def send_tracker_request():

@@ -1,5 +1,8 @@
 from ..utils.helpers import logger
-import bencodepy
+from tracker import Tracker
+from file import File
+import bencoder
+import sys
 
 
 class Client:
@@ -14,13 +17,42 @@ class Client:
         self.peers  # Connected clients within same swarm
         self.peer_id
         self.metainfo
-        self.tracker
         self.file
-        self.sock
-        open_torrent_file()  # Extract
+        load_torrent_file(torrent_file)  # Extract
         load_progress_from_disk()
 
-    def download_torrent(torrent, destination="."):
+    def load_torrent_file(self, torrent_file):
+        try:
+            with open(torrent_file, "rb") as f:
+                torrent_data = bencoder.bdecode(f.read())
+        except Exception as e:
+            sys.exit(1)
+
+        # gets the announce url from the tracker file and sets the tracker class
+        announce_url = torrent_data[b"announce"].decode()
+        # torrent_data[]
+        self.length = torrent_data[b"info"][b"length"]
+        self.filename = torrent_data[b"info"][b"name"]
+        length = torrent_data[b"info"][b"length"]
+        self.file = File(self.filename, length)
+        self.piece_length = torrent_data[b"info"][b"piece length"]
+        self.hashes = split_hashes(torrent_data[b"info"][b"pieces"])
+        self.tracker = Tracker(announce_url)
+
+    def split_hashes(bytes):
+        # TODO Test this helper function
+        if len(bytes) % 20 != 0:
+            print("Error: Torrent file hashes are invalid!")
+            sys.exit(1)
+        hash_length = 20
+        hashes = []
+        for i in range(0, len(bytes), hash_length):  # Iterates 0 to len - 1 in steps of 20
+            hash = bytes[i : i + hash_length]
+            hashes.append(hash)
+            # print(f"Hash {i} to {i + hash_length}: {hash}")
+        return hashes
+
+    def download_torrent(self, torrent, destination="."):
         """
         Downloads the files from a .torrent file to a specified directory.
 
@@ -33,36 +65,38 @@ class Client:
         Returns:
         bool: True if the torrent download was successful, False if an error occurred.
         """
+        self.tracker.connect()
+        self.sock = open_socket()
         raise NotImplementedError("This function has not been implemented yet.")
 
-    def open_socket():
+    def open_socket(self):
         pass
 
-    def add_peers():
+    def add_peers(self):
         pass
 
-    def load_file():
+    def load_file(self):
         pass
 
-    def upload_piece():
+    def upload_piece(self):
         pass
 
-    def request_piece():
+    def request_piece(self):
         pass
 
-    def bytes_left() -> int:
+    def bytes_left(self) -> int:
         """
         Returns the number of bytes this client still has to download.
         """
         pass
 
-    def display_swarm():
+    def display_swarm(self):
         pass
 
-    def display_progress():
+    def display_progress(self):
         pass
 
-    def shutdown():
+    def shutdown(self):
         """
         Saves bitmap of pieces to disk and frees client resources.
         """

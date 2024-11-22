@@ -1,7 +1,9 @@
 class File:
-    def __init__(self):
+    def __init__(self, name, length):
         self.pieces
         self.bitfield
+        self.name
+        self.length
     def write_bitfield_to_disk():
         pass
     def load_bitfield_from_disk():
