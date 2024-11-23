@@ -25,7 +25,7 @@ class ClientTests(unittest.TestCase):
         """
         Example test. Not implemented yet.
         """
-        client = torrentula.Client("fixtures/debian-mac.torrent")
+        client = torrentula.Client("./tests/fixtures/debian-mac.torrent")
         self.assertIsNotNone(client.peer_id)
         client.download_torrent()
 

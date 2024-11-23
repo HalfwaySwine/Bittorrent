@@ -1,5 +1,6 @@
 from ..utils.helpers import logger
 from .tracker import Tracker
+from .strategy import Strategy
 from .file import File
 import bencoder
 import sys
@@ -76,18 +77,14 @@ class Client:
         Returns:
         bool: True if the torrent download was successful, False if an error occurred.
         """
-        raise NotImplementedError("This function has not been implemented yet.")
-        """
-        self.tracker.connect() # TODO Receive and store response somewhere
+        self.peers = self.tracker.join_swarm()
         self.sock = self.open_socket()
-        while(self.file.get_missing_pieces() is not None):
-            self.add_peers() # And drop dead connections
-            self.strategy = Strategy()
-            self.strategy.select_pieces()
-            self.send_requests()
-            self.receive_messages()
-        """
-        return False if self.file.get_missing_pieces() else True
+        self.strategy = Strategy()
+        while self.file.bytes_left() != 0:
+            self.receive_messages(self.strategy)
+            self.send_requests(self.strategy)
+            self.send_keepalives()
+        return False if self.file.bytes_left() != 0 else True
 
     def open_socket(self):
         pass
@@ -98,7 +95,13 @@ class Client:
     def add_peers(self):
         pass
 
-    def load_file(self):
+    def send_keepalives(strategy: Strategy):
+        pass
+
+    def send_requests(strategy: Strategy):
+        pass
+
+    def receive_messages(strategy: Strategy):
         pass
 
     def upload_piece(self):
