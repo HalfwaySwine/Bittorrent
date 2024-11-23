@@ -1,26 +1,26 @@
 import logging
 import argparse
 import os
+import sys
 from ..config import LOG_FILENAME, LOG_DIRECTORY
 
-logger = None
+logger = logging.getLogger(LOG_FILENAME)
 
 
 def configure_logging():
     """
     Configures global logger variable for convenient logging to file.
     """
-    global logger
-    logger = logging.getLogger(LOG_FILENAME)
     logger.setLevel(logging.DEBUG)
     if not os.path.exists(LOG_DIRECTORY):
         os.makedirs(LOG_DIRECTORY)
     if not logger.handlers:
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        file_handler = logging.FileHandler(LOG_FILENAME)
+        file_handler = logging.FileHandler(os.path.join(LOG_DIRECTORY, LOG_FILENAME))
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+    logger.info("Logger initialized.")
 
 
 def parse_arguments():
@@ -44,6 +44,7 @@ def parse_arguments():
     args = parser.parse_args()
     logging.info(f"Parsed arguments: torr={args.torr}, dest={args.dest}")
     return args
+
 
 def validate_arguments(torr, dest):
     if not os.path.isfile(torr):

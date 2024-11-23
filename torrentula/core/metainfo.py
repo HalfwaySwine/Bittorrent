@@ -4,6 +4,5 @@ class Metainfo:
         Loads a .torrent file into a in-memory representation.
 
         Parameters:
-        filename: 
+        filename:
         """
-    
