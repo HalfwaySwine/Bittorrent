@@ -1,12 +1,15 @@
 class Block:
-    def __init__(self, length, offset):
-        self.data
-        self.length
-        self.offset  # Offset within piece
-        self.complete = False
+    def __init__(self, length, offset, data):
+        self.data = data
+        self.length = length
+        self.offset  = offset
 
-    def send_request():
-        pass
-
-    def receive_data():
-        pass
+    def get_length(self): 
+        return self.length
+    
+    def get_data(self): 
+        return self.data
+    
+    #returns string for debugging
+    def __str__(self):
+        return f"Block(offset={self.offset}, length={self.length})"
