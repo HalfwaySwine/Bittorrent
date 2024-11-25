@@ -1,8 +1,7 @@
 class Block:
-    def __init__(self, length, offset, data):
+    def __init__(self, length, data):
         self.data = data
         self.length = length
-        self.offset  = offset
 
     def get_length(self): 
         return self.length
@@ -12,4 +11,4 @@ class Block:
     
     #returns string for debugging
     def __str__(self):
-        return f"Block(offset={self.offset}, length={self.length})"
+        return f"Block(length={self.length})"
