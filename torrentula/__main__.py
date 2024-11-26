@@ -7,8 +7,8 @@ def main():
     args = parse_arguments()
     validate_arguments(args.torr, args.dest)
     # Initialize client object which unpacks the torrent file.
-    client = Client(args.torr)
-    client.download_torrent(args.torr, args.dest)
+    client = Client(args.torr, args.dest)
+    client.download_torrent()
 
 
 if __name__ == "__main__":

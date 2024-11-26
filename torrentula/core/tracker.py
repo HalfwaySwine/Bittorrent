@@ -2,7 +2,7 @@ from ..utils.helpers import logger
 import socket
 from urllib.parse import urlparse, urlencode, quote_plus
 import bencoder
-from .peer import Peer
+from peer import Peer
 from config import HTTP_PORT
 
 
