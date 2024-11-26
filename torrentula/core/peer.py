@@ -20,13 +20,17 @@ class Peer:
     Represents a peer Bittorrent client in the same swarm.
     """
 
-    def __init__(self, ip_address, port, socket=None):
+    def __init__(self, ip_address, port, socket=None, v4=True):
         """
         Socket argument is provided when the client accepted this connection from a peer rather than initiaiting it.
         """
-        # For IPv4 connections addr is a tuple: (hostname_or_ip_addr, port)
-        # This may cause issues withwhere IPv6 connections addr is a tuple: (hostname_or_ip, port, flowinfo, scopeid)
-        self.addr = (ip_address, port)
+        # IPv4 connections addr is a tuple: (hostname_or_ip_addr, port)
+        # IPv6 connections addr is a tuple: (hostname_or_ip, port, flowinfo, scopeid)
+        if v4:
+            self.addr = (ip_address, port)
+        else :
+            self.addr = (ip_address, port, 0, 0)
+
         self.socket = socket  # Value is None when this peer is disconnected.
         self.bitfield = None # Populated when first bitfield is received and kept up-to-date as peer sends updates.
 
@@ -45,17 +49,27 @@ class Peer:
         self.last_received = None # Time of last message received from peer
         self.last_sent = None # Time of last message sent to peer
 
-    def handshake(self):
-        pass
-
     def connect(self):
-        pass
+        """ 
+        Should throw an error on fail.
+        """
+        self.socket.connect(self.addr)
+
 
     def disconnect(self):
         """
         Closes socket and sets socket to None.
         """
-        pass
+        self.socket.close()
+        self.socket = None
+
+    def handshake(self, peer_id, info_hash):
+        pstr = "Torrentula"
+        pstrlen = len(pstr)
+        # 8 bytes of 0
+        reserved = bytes(8)
+        info_hash = info_hash
+        peer_id = peer_id
 
     def upload(self, block):
         pass
