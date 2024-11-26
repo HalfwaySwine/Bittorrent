@@ -29,23 +29,29 @@ Interface
     __str__()
     @Info toString
     @returns string incluinsoing the current block data it has 
-
 '''
 
 class Piece:
-    def __init__(self, index, length, hash):
+    def __init__(self, index, length, hash, torrentLength):
         self.index = index #index of piece 
-        self.length = length #length of entire piece 
+        self.length = length #length of entire piece (will be different for last piece)
         self.blocks = {}  # dictonary only used for reciving data key = offset, value = block class(data,length) however most ask for 16kb 
         self.complete = False # flag to indicate whether all blocks of the piece are present 
         self.hash = hash  #hash of entire piece from torrent file
         self.downloaded = 0 #is increased until it == length of piece
         self.pieceBuffer = None #buffer for after its completed 
         self.pendingRequests = {} #key = offset value = timestamp keeps track of the offsets we have asked for 
+        self.torrentLength = torrentLength #length listed in torrent file 
 
     #gets the next offset and length to ask the peer for for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     #return a tuple (offset to request, length to request)
     def get_next_request(self):
+        if self.length < BLOCK_SIZE:    #if last piece is smaller than the block size
+            if 0 not in self.blocks:
+                self.pendingRequests[0] = time.time()
+                return (0, self.length)
+            return (None, None) 
+
         for offset in range(0, self.length, BLOCK_SIZE):
             if offset not in self.blocks: #checks whats the next request I have yet to recive 
                 if self._check_if_already_asked(offset): #checks last request time
@@ -103,13 +109,12 @@ class Piece:
     def get_data_from_file(self, offset,blockLength): 
         try:
             with open(f"add correct file path here", "r+b") as f:
-                f.seek((self.index * self.length) + offset)
+                f.seek((self.index * self.torrentLength) + offset)
                 data = f.read(blockLength)
             return data
         except Exception as e:
             print("Error writing to disk: " + str(e))
     
-
 
     #forms complete buffer with data in block datastructure (helper fucntion)
     def _form_buffer(self):
@@ -126,7 +131,7 @@ class Piece:
     def _write_to_disk(self):
         try:
             with open(f"add correct file path here", "r+b") as f:
-                f.seek(self.index * self.length)
+                f.seek(self.index * self.torrentLength)
                 f.write(self.pieceBuffer)
         except Exception as e:
             print("Error writing to disk: " + str(e))
