@@ -1,9 +1,17 @@
 from ..utils.helpers import logger
-from ..config import EPOCH_DURATION_SECS, PEER_ID_LENGTH, MAX_PEER_OUTSTANDING_REQUESTS, MAX_PEERS
+from ..config import (
+    EPOCH_DURATION_SECS,
+    PEER_ID_LENGTH,
+    MAX_PEER_OUTSTANDING_REQUESTS,
+    MAX_CONNECTED_PEERS,
+    IN_PROGRESS_FILENAME_SUFFIX,
+    BITTORRENT_PORT,
+)
 from .tracker import Tracker
 from .strategy import Strategy
 from .file import File
 import bencoder
+import os
 import sys
 import signal
 import socket
@@ -13,6 +21,8 @@ from string import printable
 from datetime import datetime, timedelta
 import hashlib
 from urllib.parse import quote_plus
+from pathlib import Path
+from .peer import Peer
 
 
 class Client:
@@ -20,7 +30,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file, destination, port: int = 6881):
+    def __init__(self, torrent_file, destination, port: int = BITTORRENT_PORT):
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
         self.peers = []  # Connected clients within same swarm
@@ -51,10 +61,10 @@ class Client:
         self.info_hash = quote_plus(hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest())
         self.tracker = Tracker(announce_url, self.peer_id, self.info_hash)
         # Extracts file metadata from torrent file and sets up the File class.
-        self.filename = torrent_data[b"info"][b"name"]
-        self.length = torrent_data[b"info"][b"length"]
+        self.filename = torrent_data[b"info"][b"name"].decode("utf-8")
+        self.length = int(torrent_data[b"info"][b"length"])
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
-        piece_length = torrent_data[b"info"][b"piece length"]
+        piece_length = int(torrent_data[b"info"][b"piece length"])
         assert len(hashes) * piece_length == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
 
@@ -77,7 +87,7 @@ class Client:
             hashes.append(hash)
         return hashes
 
-    def download_torrent(self, torrent, destination=".") -> bool:
+    def download_torrent(self) -> bool:
         """
         Downloads the files from a .torrent file to a specified directory.
 
@@ -90,8 +100,8 @@ class Client:
         Returns:
         bool: True if the torrent download was successful, False if an error occurred.
         """
-        self.peers = self.tracker.join_swarm()
-        self.sock = self.open_socket()
+        self.peers = self.tracker.join_swarm(self.file.bytes_left())
+        self.open_socket()
         self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
         while not self.file.complete():
@@ -103,33 +113,54 @@ class Client:
             self.send_keepalives()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
                 self.establish_new_epoch()
-        return True if self.file.complete() else False
+        # Clean up resources
+        self.cleanup()
+        if self.file.complete():  # If file is complete, rename file to real name and delete bitfield.
+            path = Path(self.destination)
+            self.file.rename(path / self.filename)
+            self.file.remove_bitfield_from_disk()
+            return True
+        return False
 
     def open_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        host = "0.0.0.0" # Listen on all interfaces
-        self.sock.connect((host, self.port))
-        self.sock.listen(MAX_PEERS)
-        print(f"Listening for connections on {host}:{self.port}...")
-
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        host = "0.0.0.0"  # Listen on all interfaces
+        self.sock.bind((host, self.port))
+        self.sock.listen(MAX_CONNECTED_PEERS)
+        logger.info(f"Listening for connections on {host}:{self.port}...")
 
     def establish_new_epoch(self):
         for peer in self.peers:
             peer.establish_new_epoch()
+        self.execute_choke_transition()
         self.epoch_start_time = datetime.now()
+        logger.debug("Established new epoch.")
+
+    def execute_choke_transition(self):
+        currently_unchoked = [peer for peer in self.peers if not peer.am_choking]
+        to_unchoke = self.strategy.choose_peers()
+        for peer in to_unchoke:
+            peer.unchoke()
+        choke = [peer for peer in currently_unchoked if peer not in to_unchoke]
+        for peer in choke:
+            peer.choke()
 
     def accept_peers(self):
         timeout = 0
+        assert self.sock.fileno() > 0
         rdy, _, _ = select.select([self.sock], [], [], timeout)
-        connected_peers = len(peer for peer in self.peers if peer.socket is not None)
-        while rdy and connected_peers < MAX_PEERS: # Accept up to the maximum number of peers
+        connected_peers = len([peer for peer in self.peers if peer.socket is not None])
+        while rdy and connected_peers < MAX_CONNECTED_PEERS:  # Accept up to the maximum number of peers
             sock, addr = self.sock.accept()
+            self.peers.append(Peer(addr[0], addr[1], sock, True))
             connected_peers += 1
-            print(f"Connection established with {addr}")
+            logger.info(f"Connection established with peer: {addr}")
             rdy, _, _ = select.select([self.sock], [], [], timeout)
 
     def close_socket(self):
-        self.sock.close()
+        if self.sock:
+            self.sock.close()
 
     def add_peers(self):
         additional_peers = self.strategy.determine_additional_peers(self.file, self.peers)
@@ -138,7 +169,7 @@ class Client:
             not_connected = [peer for peer in self.peers if peer.socket is None]
             for peer in not_connected:
                 peer.connect()
-            self.tracker.request_peers():
+            # self.tracker.request_peers(): TODO
 
     def send_haves(self, completed_pieces):
         """
@@ -151,29 +182,23 @@ class Client:
             peer.send_keepalive()
 
     def send_requests(self):
-        self.strategy.assign_pieces()
-        available_peers = [peer for peer in self.peers if peer.am_unchoked and peer.am_interested]
+        self.strategy.assign_pieces(self.file.get_missing_pieces(), self.peers)
+        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
         for peer in available_peers:
             num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.active_requests)
             for req in range(num_requests):
-                offset, length = self.pieces[peer.target_piece].get_next_request()
+                offset, length = self.file.pieces[peer.target_piece].get_next_request()
                 if offset is None or length is None:  # Target piece is complete
                     break
                 peer.send_request(peer.target_piece, offset, length)
 
     def receive_messages(self):
-        rdy_peers = select.select([peer.socket for peer in self.peers if peer.sock is not None], [], [],  0)
-        for peer in rdy_peers:
+        ready_peers, _, _ = select.select([peer.socket for peer in self.peers if peer.socket is not None], [], [], 0)
+        for peer in ready_peers:
             peer.receive_messages()
-        check_liveness = [peer for peer in self.peers if peer not in rdy_peers and peer.sock is not None]
+        check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.socket is not None]
         for peer in check_liveness:
             peer.check_timeout()
-
-    def bytes_left(self) -> int:
-        """
-        Returns the number of bytes this client still has left to download.
-        """
-        return sum(self.pieces[piece_index].length for piece_index in self.file.get_missing_pieces())
 
     def display_peers(self):
         """
@@ -203,10 +228,16 @@ class Client:
         self.display_peers()
         print(self.file)
 
-    def shutdown(self):
+    def shutdown(self, signum=None, frame=None):
         """
         Saves bitmap of pieces to disk and frees client resources.
+        Runs during normal termination and also upon early termination as a handler for SIGINT and SIGTERM.
         """
-        self.close_socket()
+        self.cleanup()
         self.file.write_bitfield_to_disk()
-        pass
+        sys.exit(1)
+
+    def cleanup(self):
+        self.tracker.disconnect()
+        self.close_socket()
+

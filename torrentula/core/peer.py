@@ -108,7 +108,7 @@ class Peer:
         pass
 
     def send_keepalive(self):
-        if datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+        if self.socket is None or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
             return  # Keepalive is not necessary
         else:
             raise NotImplementedError("This function has not been implemented yet.")
@@ -116,4 +116,3 @@ class Peer:
     def establish_new_epoch(self):
         self.bytes_downloaded = 0
         self.bytes_uploaded = 0
-        # self.choke()

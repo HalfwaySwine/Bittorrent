@@ -2,8 +2,8 @@ from ..utils.helpers import logger
 import socket
 from urllib.parse import urlparse, urlencode, quote_plus
 import bencoder
-from peer import Peer
-from config import HTTP_PORT
+from .peer import Peer
+from ..config import HTTP_PORT
 
 
 class Tracker:
@@ -11,19 +11,21 @@ class Tracker:
     Server managing swarm associated with a torrent. A client can join the swarm by sending a request to this server using its associated url or IP address.
     """
 
-    def __init__(self, url):
+    def __init__(self, url, peer_id, info_hash):
         self.url = url
         self.timestamp = None
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("", HTTP_PORT))
+        self.peer_id = peer_id
+        self.info_hash = info_hash
 
-    def join_swarm(self, peer_id, info_hash, bytes_left) -> list[Peer]:
+    def join_swarm(self, bytes_left) -> list[Peer]:
         """
         Returns: Returns a list of peer objects and sets request interval if successful. Terminates program if there is an error.
         """
         params = {
-            "peer_id": peer_id,
+            "peer_id": self.peer_id,
             "port": HTTP_PORT,
             "uploaded": 0,
             "downloaded": 0,
@@ -41,7 +43,7 @@ class Tracker:
         # Construct get request
         encoded_params = urlencode(params)
         # Construct the HTTP GET request
-        request = f"GET /announce?info_hash={info_hash}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        request = f"GET /announce?info_hash={self.info_hash}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
         self.sock.sendall(request.encode())
         # Receive response
         response = b""
@@ -54,7 +56,6 @@ class Tracker:
         # TODO: Handle bad/invalid http responses
         # Decode the bencoded body
         decoded = bencoder.bdecode(body)
-        print(decoded.keys())
         # Extract information
         # Seconds that the client should wait between sending regular requests to the tracker
         self.interval = decoded[b"interval"]
@@ -78,5 +79,6 @@ class Tracker:
         """
         pass
 
-    def shutdown_tracker(self):
-        self.sock.close()
+    def disconnect(self):
+        if self.sock:
+            self.sock.close()

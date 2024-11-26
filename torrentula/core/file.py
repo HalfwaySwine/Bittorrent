@@ -1,26 +1,31 @@
 from .piece import Piece
 from math import ceil
 from pathlib import Path
+import os
+from ..config import BITFIELD_FILE_SUFFIX, IN_PROGRESS_FILENAME_SUFFIX
+from ..utils.helpers import logger
 
 
 class File:
     def __init__(self, name, destination, length, piece_length, hashes):
-        self.pieces = [Piece(index, piece_length, hash, length, destination) for index, hash in enumerate(hashes)]
         self.piece_length = piece_length
         self.name = name
         self.destination = destination
+        self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
+        self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
+        self.pieces = [Piece(index, piece_length, hash, length, self.torrent_path) for index, hash in enumerate(hashes)]
+        self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length
         self.length = length
         self.bitfield: list[int] = self.load_bitfield_from_disk()
 
     def get_bitfield(self):
         return self.bitfield
-    
+
     def write_bitfield_to_disk(self):
         """
         Writes bitfield to disk to save progress.
         """
-        path = Path(self.destination) / f"{self.name}.bitfield"
-        with open(path, "w") as file:
+        with open(self.bitfield_path, "w") as file:
             for bit in self.bitfield:
                 file.write(str(bit))
 
@@ -45,24 +50,24 @@ class File:
                 newly_completed.append(index)
                 self.bitfield[index] = 1
 
-        if not newly_completed.empty():
+        if not newly_completed:  # Bitfield was updated
             self.write_bitfield_to_disk()
         return newly_completed
 
     def __str__(self):
         print("===Overall===")
-        print(f"Progress: {get_total_downloaded()}")
-        
+        print(f"Progress: {self.get_total_downloaded()} / {self.length}")
+
         print("===Pieces===")
         for index, piece in enumerate(self.pieces):
             print(index, ": ", piece)
 
     def get_download_percents(self) -> str:
         return [piece.get_download_percent() for piece in self.pieces]
-    
+
     def get_total_downloaded(self) -> str:
         total = 0
-        for piece in pieces:
+        for piece in self.pieces:
             total += piece.downloaded
         return total
 
@@ -72,8 +77,22 @@ class File:
             if bit == 0:
                 missing.append(index)
         return missing
-        
 
     def complete(self) -> bool:
         """Returns True if file is complete, False otherwise."""
         return self.get_missing_pieces() == []
+
+    def bytes_left(self) -> int:
+        """
+        Returns the number of bytes this client still has left to download.
+        """
+        return sum(self.pieces[piece_index].length for piece_index in self.get_missing_pieces())
+
+    def rename(self, new):
+        old = Path(self.destination) / self.name
+        os.rename(old, new)
+        logger.info("Renamed file from '{old}' to '{new}'.")
+
+    def remove_bitfield_from_disk(self):
+        os.remove(self.bitfield_path)
+        logger.info("Removed bitfield from disk.")

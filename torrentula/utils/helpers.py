@@ -20,6 +20,7 @@ def configure_logging():
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
+    # logger.propagate = False # Uncomment to have logs additionally print to stderr
     logger.info("Logger initialized.")
 
 
