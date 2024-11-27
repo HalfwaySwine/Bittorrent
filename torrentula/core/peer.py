@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from enum import Enum
 from ..config import PEER_INACTIVITY_TIMEOUT_SECS
+from ..utils.helpers import logger
 import socket
 import struct
 
@@ -64,16 +65,17 @@ class Peer:
         self.socket.close()
         self.socket = None
 
-    def handshake(self, peer_id, info_hash):
+    def handshake(self, info_hash, peer_id):
         """
         Send handshake message.
         """
-        pstr = "Torrentula"
+        pstr = "BitTorrent protocol"
         pstrlen = len(pstr)
         info_hash = info_hash
         peer_id = peer_id
         # ! = big endian, B = unsigned char, then string s, then 8 padding 0s, then 2 20 length strings
-        msg = struct.pack(f"!B{pstrlen}s8x20s20s", pstrlen, pstr, info_hash, peer_id)
+        msg = struct.pack(f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode('utf-8'), info_hash, peer_id)
+        logger.debug(msg)
         self.socket.sendall(msg)
         
         
@@ -109,10 +111,12 @@ class Peer:
         """
         Sends a choke message to peer and stores that state if peer is currently unchoked. Otherwise, does nothing.
         """
-        pass
+        if self.am_choking == True:
+            return
 
     def unchoke(self):
-        pass
+        if self.am_choking == False:
+            return
 
     def send_keepalive(self):
         if self.socket is None or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
