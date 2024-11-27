@@ -100,8 +100,8 @@ class Client:
         Returns:
         bool: True if the torrent download was successful, False if an error occurred.
         """
-        self.peers = self.tracker.join_swarm(self.file.bytes_left())
         self.open_socket()
+        self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
         while not self.file.complete():

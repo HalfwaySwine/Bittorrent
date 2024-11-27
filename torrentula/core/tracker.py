@@ -20,13 +20,13 @@ class Tracker:
         self.peer_id = peer_id
         self.info_hash = info_hash
 
-    def join_swarm(self, bytes_left) -> list[Peer]:
+    def join_swarm(self, bytes_left, port) -> list[Peer]:
         """
         Returns: Returns a list of peer objects and sets request interval if successful. Terminates program if there is an error.
         """
         params = {
             "peer_id": self.peer_id,
-            "port": HTTP_PORT,
+            "port": port,
             "uploaded": 0,
             "downloaded": 0,
             "left": bytes_left,
