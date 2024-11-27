@@ -30,7 +30,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file, destination, port: int = BITTORRENT_PORT):
+    def __init__(self, torrent_file: str, destination: str = ".", port: int = BITTORRENT_PORT):
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
         self.peers = []  # Connected clients within same swarm
@@ -82,7 +82,7 @@ class Client:
             len(bytes) % 20 == 0
         ), f"Error: Torrent file hashes ({len(bytes)} bytes) are not a multiple of hash_length ({hash_length})!"
         hashes = []
-        for i in range(0, len(bytes), hash_length):  # Iterates 0 to len - 1 in steps of 20
+        for i in range(0, len(bytes), hash_length):  # Iterates [0, len - 1] in steps of 20.
             hash = bytes[i : i + hash_length]
             hashes.append(hash)
         return hashes
@@ -139,7 +139,7 @@ class Client:
 
     def execute_choke_transition(self):
         currently_unchoked = [peer for peer in self.peers if not peer.am_choking]
-        to_unchoke = self.strategy.choose_peers()
+        to_unchoke = self.strategy.choose_peers(self.peers)
         for peer in to_unchoke:
             peer.unchoke()
         choke = [peer for peer in currently_unchoked if peer not in to_unchoke]
@@ -240,4 +240,3 @@ class Client:
     def cleanup(self):
         self.tracker.disconnect()
         self.close_socket()
-

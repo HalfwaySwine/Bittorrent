@@ -1,13 +1,5 @@
-import sys
-import os
 import unittest
-
-# Add parent directory to sys.path to make 'torrentula' package importable
-current_dir = os.path.dirname(__file__)
-parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
-sys.path.append(parent_dir)
-import torrentula
-
+from tests import torrentula
 
 class ClientTests(unittest.TestCase):
     """
