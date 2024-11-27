@@ -58,8 +58,8 @@ class Client:
 
         # Extracts announce url from the torrent file and sets up the Tracker class.
         announce_url = torrent_data[b"announce"].decode()
-        self.info_hash = quote_plus(hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest())
-        self.tracker = Tracker(announce_url, self.peer_id, self.info_hash)
+        self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
+        self.tracker = Tracker(announce_url, self.peer_id, quote_plus(self.info_hash))
         # Extracts file metadata from torrent file and sets up the File class.
         self.filename = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
