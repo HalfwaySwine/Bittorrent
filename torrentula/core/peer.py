@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from enum import Enum
 from ..config import PEER_INACTIVITY_TIMEOUT_SECS
-
+import socket
+import struct
 
 class MessageType(Enum):
     CHOKE = 0
@@ -64,12 +65,18 @@ class Peer:
         self.socket = None
 
     def handshake(self, peer_id, info_hash):
+        """
+        Send handshake message.
+        """
         pstr = "Torrentula"
         pstrlen = len(pstr)
-        # 8 bytes of 0
-        reserved = bytes(8)
         info_hash = info_hash
         peer_id = peer_id
+        # ! = big endian, B = unsigned char, then string s, then 8 padding 0s, then 2 20 length strings
+        msg = struct.pack(f"!B{pstrlen}s8x20s20s", pstrlen, pstr, info_hash, peer_id)
+        self.socket.sendall(msg)
+        
+        
 
     def upload(self, block):
         pass
