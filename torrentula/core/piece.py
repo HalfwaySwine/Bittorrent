@@ -49,6 +49,8 @@ class Piece:
     # gets the next offset and length to ask the peer for for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
     def get_next_request(self):
+        if self.complete: 
+            return (None, None)
         if self.length < BLOCK_SIZE:  # if last piece is smaller than the block size
             if 0 not in self.blocks:
                 self.pendingRequests[0] = time.time()
@@ -97,6 +99,7 @@ class Piece:
                 self.pendingRequests = {}
                 self.pieceBuffer = None
                 self.downloaded = 0
+                self.complete = False
                 return -1
             self._write_to_disk()
             return 0
@@ -144,5 +147,6 @@ class Piece:
         for offset, value in self.blocks.items():
             info += "Offset=" + str(offset) + " "
             info += value.__str__()
-            info + " "
+            info += " "
+            into += "Download %: " + str(self.get_download_percent)
         return info

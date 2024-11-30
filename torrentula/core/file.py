@@ -14,13 +14,15 @@ class File:
         self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
         self.pieces = [Piece(index, piece_length, hash, length, self.torrent_path) for index, hash in enumerate(hashes)]
-        self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length
+        self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length #TODO check this
         self.length = length
         self.bitfield: list[int] = self.load_bitfield_from_disk()
 
+    #returns bitfield
     def get_bitfield(self):
         return self.bitfield
 
+    #writes the updated bitfield to the file
     def write_bitfield_to_disk(self):
         """
         Writes bitfield to disk to save progress.
@@ -29,18 +31,24 @@ class File:
             for bit in self.bitfield:
                 file.write(str(bit))
 
+
+    #loads or creates bitfield in file 
     def load_bitfield_from_disk(self):
         """
         Loads bitfield from disk (if it exists) to restart where previous download left off.
         """
-        if False:
-            # Bitfield exists on disk
-            raise NotImplementedError("This function has not been implemented yet.")
-        else:
-            # Bitfield does not exist
-            return [0 for _ in range(ceil(self.length / self.piece_length))]
+        if os.path.isfile(self.bitfield_path): #already there 
+            with open(self.bitfield_path, "r+") as file1:
+                bitfield = [int(char) for char in file1.read().strip()] 
+                return bitfield
+        else: #doesn't exist yet 
+            bitfield = [0] * len(self.pieces)
+            with open(self.bitfield_path, "w") as file1:
+                file1.write("".join(map(str, bitfield)))
+            return bitfield
 
-    def update_bitfield(self) -> list[int]:
+    #updated bitfield and checks for newly completed pieces to add and send 
+    def update_bitfield(self):
         """
         Scans through progress on pieces to update bitfield in memory and write it to disk to save any progress. Returns a list of indices representing newly completed pieces.
         """
@@ -54,6 +62,7 @@ class File:
             self.write_bitfield_to_disk()
         return newly_completed
 
+    #toString
     def __str__(self):
         print("===Overall===")
         print(f"Progress: {self.get_total_downloaded()} / {self.length}")
@@ -62,37 +71,77 @@ class File:
         for index, piece in enumerate(self.pieces):
             print(index, ": ", piece)
 
+
+    #returns list of download precents per piece
     def get_download_percents(self) -> str:
         return [piece.get_download_percent() for piece in self.pieces]
 
+
+    #gets downloaded amount from piece
     def get_total_downloaded(self) -> str:
         total = 0
         for piece in self.pieces:
             total += piece.downloaded
         return total
 
-    def get_missing_pieces(self) -> list[int]:
+    #checks if file has piece undownloaded (helper)
+    def get_missing_pieces(self):
         missing = []
         for index, bit in enumerate(self.bitfield):
             if bit == 0:
                 missing.append(index)
         return missing
+    
+    #checks if file has piece downloaded (helper)
+    def get_has_pieces(self):
+        has = []
+        for index, bit in enumerate(self.bitfield):
+            if bit == 1:
+                has.append(index)
+        return has
 
+    #returns true or false if file is complete
     def complete(self) -> bool:
         """Returns True if file is complete, False otherwise."""
         return self.get_missing_pieces() == []
 
+    #calcs how many bytes are left of verified data
     def bytes_left(self) -> int:
         """
-        Returns the number of bytes this client still has left to download.
+        Returns the number of bytes this client still has left to download.   
         """
-        return sum(self.pieces[piece_index].length for piece_index in self.get_missing_pieces())
+        total = 0
+        for piece_index in self.get_missing_pieces():
+            print(total)
+            total += self.pieces[piece_index].length
+        return total
+        
+    
+    #calcs how many bytes have been downloaded of verfied data
+    def bytes_downloaded(self) -> int:
+        """
+        Returns the number of bytes this client has downloaded 
+        """
+        return sum(self.pieces[piece_index].length for piece_index in self. get_has_pieces())
 
+    #helper to get the bytes left/downloaded based on unverifed data (bytesLeft is boolean)
+    def bytes_verified_unverfied(self, bytesLeft): 
+        total = 0
+        if bytesLeft: #gets bytes left
+            for i in self.pieces:
+                total += (i.length - i.downloaded)
+        else: # gets bytes downloaded 
+            for i in self.pieces:
+                total += i.downloaded
+        return total
+
+    #removes the .part when the file is complete 
     def rename(self, new):
         old = Path(self.destination) / self.name
         os.rename(old, new)
         logger.info("Renamed file from '{old}' to '{new}'.")
 
+    #removes bitfield from file
     def remove_bitfield_from_disk(self):
         os.remove(self.bitfield_path)
         logger.info("Removed bitfield from disk.")
