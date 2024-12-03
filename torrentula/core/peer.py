@@ -100,6 +100,7 @@ class Peer:
         index = piece.index
         msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
         self.send_msg(msg)
+        self.active_requests.append((index, offset, length))
 
     # was handled in receive_messages
     # def download(self, block):
@@ -116,8 +117,20 @@ class Peer:
         we also don't really handle unexpected recvs, could cause some erroring that may need to be caught
         """
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
-            pstrlen = int.from_bytes(self.socket.recv(1))
+
+            pstrlen_bytes = self.socket.recv(1)
+            if len(pstrlen_bytes) == 0:
+                logger.debug(f"connection closed, disconnecting")
+                self.disconnect()
+                return -1
+            
+            pstrlen = int.from_bytes(pstrlen_bytes)
             bytes = self.socket.recv(pstrlen + 48)
+            if len(bytes) == 0:
+                logger.debug(f"connection closed, disconnecting")
+                self.disconnect()
+                return -1
+            
             pstr, padding, info_hash, peer_id = struct.unpack(f"!{pstrlen}s8s20s20s", bytes)
             logger.debug(f"received {pstr}, {padding}, {info_hash}, {peer_id}")
             # may want to do smth with pstr, padding, and peer_id 
@@ -134,11 +147,30 @@ class Peer:
         else:
             # once we receive any other message other than a handshake we can't receive a bitmap anymore
             self.received_handshake = Handshake.HANDSHAKE_RECVD
-            msg_len = int.from_bytes(self.socket.recv(4), "big")
+
+            msg_len_bytes = self.socket.recv(4)
+            if len(msg_len_bytes) == 0:
+                logger.debug(f"connection closed, disconnecting")
+                self.disconnect()
+                return -1
+            
+            msg_len = int.from_bytes(msg_len_bytes, "big")
             logger.debug(f"recieved msg len: {msg_len}")
             # differentiating from keepalive, we don't have to do anything if it's a keepalive
             if (msg_len > 0):
-                msg_type = int.from_bytes(self.socket.recv(1), "big")
+                msg = b""
+                while len(msg) < msg_len:
+
+                    section = self.socket.recv(msg_len - len(msg))
+                    # recv returns an empty bytes object when the connection is closed
+                    if len(section) == 0:
+                        logger.debug(f"connection closed, disconnecting")
+                        self.disconnect()
+                        return -1
+                    
+                    msg += section
+
+                msg_type = int.from_bytes(msg[0:1], "big")
                 logger.debug(f"recieved msg type: {msg_type}")
                 if msg_type == MessageType.CHOKE.value:
                     self.peer_choking = True
@@ -149,35 +181,34 @@ class Peer:
                 if msg_type == MessageType.NOT_INTERESTED.value:
                     self.peer_interested = False
                 if msg_type == MessageType.HAVE.value:
-                    piece_index = int.from_bytes(self.socket.recv(4), "big")
+                    piece_index = int.from_bytes(msg[1:], "big")
                     self.bitfield[piece_index] = 1
                 if msg_type == MessageType.BITFIELD.value:
-                    bitfield_bytes = self.socket.recv(msg_len - 1)
+                    bitfield_bytes = msg[1:]
                     for i in range(len(self.bitfield)):
                         byte_index = i // 8
                         index_in_byte = i % 8
                         byte = bitfield_bytes[byte_index]
                         self.bitfield[i] = byte >> (7 - index_in_byte) & 1
                 if msg_type == MessageType.REQUEST.value:
-                    info = self.socket.recv(12)
-                    index, offset, length = struct.unpack(f"!III", info)
+                    index, offset, length = struct.unpack(f"!III", msg[1:])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
                     # discuss how to implement others requesting
 
                 if msg_type == MessageType.PIECE.value:
                     # will get the block and add it to the piece
-                    info = self.socket.recv(8)
+                    # 8 bytes after is info
+                    info = msg[1:9]
                     index, offset = struct.unpack(f"!II", info)
-                    logger.debug(f"recieved index: {index}, offset {offset}")
+                    logger.debug(f"recieved piece with index: {index}, offset {offset}")
                     length = msg_len - 9
                     # we should check index and offset against our request
                     if (index, offset, length) in self.active_requests:
                         self.active_requests.remove((index, offset, length))
-                        block = self.socket.recv(length)
-                        self.target_piece.add_block(offset, block)
+                        self.target_piece.add_block(offset, msg[9:])
                         self.bytes_received += length
                 if msg_type == MessageType.CANCEL.value:
-                    info = self.socket.recv(12)
+                    info = msg[1:]
                     index, offset, length = struct.unpack(f"!III", info)
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
                     # will figure out when we implement others requesting

@@ -25,14 +25,18 @@ piece = Piece(0, PIECE_LENGTH, HASH, PIECE_LENGTH, ADD_PATH)
 configure_logging()
 # apparently this guy is a seeder that's always running or smth
 peer = Peer("72.235.13.154", 6881, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', b'12345678901234567890', 2516, socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+peer.target_piece = piece
 peer.connect()
 peer.handshake()
+print("can send bitfield: ", peer.can_send_bitfield)
 peer.receive_messages()
 print(peer.received_handshake)
+print("can send bitfield: ", peer.can_send_bitfield)
 # send a bitfield of all 0s
 peer.send_bitfield(bytes(315))
 peer.receive_messages()
 print(peer.received_handshake)
+print("can send bitfield: ", peer.can_send_bitfield)
 peer.send_interested()
 
 # look in wireshark to see if packet is as intended
@@ -47,5 +51,6 @@ while True:
         offset, length = piece.get_next_request()
         peer.send_request(piece, offset, length)
         i += 1
+    rdy = []
 
 
