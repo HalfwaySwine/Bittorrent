@@ -194,7 +194,7 @@ class Peer:
                     index, offset, length = struct.unpack(f"!III", msg[1:])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
                     # discuss how to implement others requesting
-
+                    # send back if unchoking, peer interested, and within allotment
                 if msg_type == MessageType.PIECE.value:
                     # will get the block and add it to the piece
                     # 8 bytes after is info
