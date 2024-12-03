@@ -31,9 +31,10 @@ class Peer:
     Represents a peer Bittorrent client in the same swarm.
     """
 
-    def __init__(self, ip_address, port, info_hash, peer_id, socket=None, v4=True):
+    def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, socket=None, v4=True):
         """
         Socket argument is provided when the client accepted this connection from a peer rather than initiaiting it.
+        bitfield_length is the number of pieces in the torrent
         """
         # IPv4 connections addr is a tuple: (hostname_or_ip_addr, port)
         # IPv6 connections addr is a tuple: (hostname_or_ip, port, flowinfo, scopeid)
@@ -43,7 +44,7 @@ class Peer:
             self.addr = (ip_address, port, 0, 0)
 
         self.socket = socket  # Value is None when this peer is disconnected.
-        self.bitfield = None # Populated when first bitfield is received and kept up-to-date as peer sends updates.
+        self.bitfield = [0] * bitfield_length # Initialized to all 0 for the length of the torrent
 
         # Connections start out choked and not interested.
         self.am_interested = False
@@ -95,11 +96,14 @@ class Peer:
     def upload(self, block):
         pass
 
-    def request(self, piece):
-        pass
+    def send_request(self, piece, offset, length):
+        index = piece.index
+        msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
+        self.send_msg(msg)
 
-    def download(self, block):
-        pass
+    # was handled in receive_messages
+    # def download(self, block):
+    #     pass
 
     def receive_messages(self):
         """
@@ -131,16 +135,58 @@ class Peer:
             # once we receive any other message other than a handshake we can't receive a bitmap anymore
             self.received_handshake = Handshake.HANDSHAKE_RECVD
             msg_len = int.from_bytes(self.socket.recv(4), "big")
-            logger.debug(f"msg len: {msg_len}")
+            logger.debug(f"recieved msg len: {msg_len}")
             # differentiating from keepalive, we don't have to do anything if it's a keepalive
             if (msg_len > 0):
                 msg_type = int.from_bytes(self.socket.recv(1), "big")
-                logger.debug(f"msg type: {msg_type}")
+                logger.debug(f"recieved msg type: {msg_type}")
+                if msg_type == MessageType.CHOKE.value:
+                    self.peer_choking = True
+                if msg_type == MessageType.UNCHOKE.value:
+                    self.peer_choking = False
+                if msg_type == MessageType.INTERESTED.value:
+                    self.peer_interested = True
+                if msg_type == MessageType.NOT_INTERESTED.value:
+                    self.peer_interested = False
+                if msg_type == MessageType.HAVE.value:
+                    piece_index = int.from_bytes(self.socket.recv(4), "big")
+                    self.bitfield[piece_index] = 1
+                if msg_type == MessageType.BITFIELD.value:
+                    bitfield_bytes = self.socket.recv(msg_len - 1)
+                    for i in range(len(self.bitfield)):
+                        byte_index = i // 8
+                        index_in_byte = i % 8
+                        byte = bitfield_bytes[byte_index]
+                        self.bitfield[i] = byte >> (7 - index_in_byte) & 1
+                if msg_type == MessageType.REQUEST.value:
+                    info = self.socket.recv(12)
+                    index, offset, length = struct.unpack(f"!III", info)
+                    logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
+                    # discuss how to implement others requesting
+
+                if msg_type == MessageType.PIECE.value:
+                    # will get the block and add it to the piece
+                    info = self.socket.recv(8)
+                    index, offset = struct.unpack(f"!II", info)
+                    logger.debug(f"recieved index: {index}, offset {offset}")
+                    length = msg_len - 9
+                    # we should check index and offset against our request
+                    if (index, offset, length) in self.active_requests:
+                        self.active_requests.remove((index, offset, length))
+                        block = self.socket.recv(length)
+                        self.target_piece.add_block(offset, block)
+                        self.bytes_received += length
+                if msg_type == MessageType.CANCEL.value:
+                    info = self.socket.recv(12)
+                    index, offset, length = struct.unpack(f"!III", info)
+                    logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
+                    # will figure out when we implement others requesting
         self.last_received = datetime.now()
         return 1
 
     def send_interested(self):
-        pass
+        msg = struct.pack(f"!IB", 1, 2)
+        self.send_msg(msg)
 
     def send_have(self, index: int):
         pass
@@ -154,7 +200,7 @@ class Peer:
         """
         bitfield_length = len(bitfield)
         msg_length = len(bitfield) + 1 
-        msg = struct.pack(f"!iB{bitfield_length}s", msg_length, MessageType.BITFIELD.value, bitfield)
+        msg = struct.pack(f"!IB{bitfield_length}s", msg_length, MessageType.BITFIELD.value, bitfield)
         self.send_msg(msg)
 
     def send_msg(self, msg):
@@ -186,5 +232,5 @@ class Peer:
             raise NotImplementedError("This function has not been implemented yet.")
 
     def establish_new_epoch(self):
-        self.bytes_downloaded = 0
-        self.bytes_uploaded = 0
+        self.bytes_received = 0
+        self.bytes_sent = 0
