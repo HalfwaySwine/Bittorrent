@@ -1,10 +1,10 @@
 from ..utils.helpers import logger
 import socket
-from urllib.parse import urlparse, urlencode, quote_plus
+from urllib.parse import urlparse, urlencode, quote_plus, unquote_plus
 import bencoder
 from .peer import Peer
 from ..config import HTTP_PORT
-
+import sys
 
 class Tracker:
     """
@@ -24,38 +24,7 @@ class Tracker:
         """
         Returns: Returns a list of peer objects and sets request interval if successful. Terminates program if there is an error.
         """
-        params = {
-            "peer_id": self.peer_id,
-            "port": port,
-            "uploaded": 0,
-            "downloaded": 0,
-            "left": bytes_left,
-            "event": "started",
-        }
-
-        # Connect to tracker
-        parsed_url = urlparse(self.url)
-        host = parsed_url.hostname
-        port = parsed_url.port
-        logger.debug(f"Tracker is at {host}: {port}")
-        self.sock.connect((host, port))
-
-        # Construct get request
-        encoded_params = urlencode(params)
-        # Construct the HTTP GET request
-        request = f"GET /announce?info_hash={self.info_hash}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
-        self.sock.sendall(request.encode())
-        # Receive response
-        response = b""
-        while True:
-            data = self.sock.recv(4096)
-            if not data:
-                break
-            response += data
-        headers, body = response.split(b"\r\n\r\n", 1)
-        # TODO: Handle bad/invalid http responses
-        # Decode the bencoded body
-        decoded = bencoder.bdecode(body)
+        decoded = self.send_tracker_request(port, 0, 0, bytes_left, "started")
         # Extract information
         # Seconds that the client should wait between sending regular requests to the tracker
         self.interval = decoded[b"interval"]
@@ -67,8 +36,75 @@ class Tracker:
             logger.debug(f"Peer: {ip}:{port}")
         return peer_list
 
-    def send_tracker_request(self):
-        pass
+    def send_tracker_request(self, port, uploaded, downloaded, left, event):
+        params = {
+            "peer_id": self.peer_id,
+            "port": port,
+            "uploaded": uploaded,
+            "downloaded": downloaded,
+            "left": left,
+            "numwant": 30,
+            "event": event,
+        }
+        parsed_url = urlparse(self.url)
+        host = parsed_url.hostname
+        port = parsed_url.port
+        self.sock.connect((host, port))
+
+         # Construct get request
+        encoded_params = urlencode(params)
+        # Construct the HTTP GET request
+        request = f"GET /announce?info_hash={self.info_hash}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        self.sock.sendall(request.encode())
+        # Receive response
+        response = b""
+        while True:
+            data = self.sock.recv(4096)
+            if not data:
+                break
+            response += data
+
+        status_code = int(response.decode().split('\r\n')[0].split()[1])
+        headers, body = response.split(b"\r\n\r\n", 1)
+        if status_code >= 400:
+            # TODO: Handle bad/invalid http responses
+            logger.critical(f"{headers}")
+            sys.exit()
+        # Decode the bencoded body
+        decoded = bencoder.bdecode(body)
+        return decoded
+
+    def send_scrape(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("", HTTP_PORT))
+        parsed_url = urlparse(self.url)
+        host = parsed_url.hostname
+        port = parsed_url.port
+        self.sock.connect((host, port))
+        request = f"GET /scrape?info_hash={self.info_hash} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        self.sock.sendall(request.encode())
+        print(request)
+        # Receive response
+        response = b""
+        while True:
+            data = self.sock.recv(4096)
+            if not data:
+                break
+            response += data
+        print(response)
+        #status_code = int(response.decode().split('\r\n')[0].split()[1])
+        header, body = response.split(b"\r\n\r\n", 1)
+        # if status_code >= 400:
+        #     # TODO: Handle bad/invalid http responses
+        #     logger.critical(f"{headers}")
+        #     sys.exit()
+        # Decode the bencoded body
+        decoded = bencoder.bdecode(body)
+        logger.debug(decoded[b"flags"])
+        logger.debug(decoded[b"files"])
+        self.sock.close()
+
 
     def parse_tracker_resonse(self):
         """
