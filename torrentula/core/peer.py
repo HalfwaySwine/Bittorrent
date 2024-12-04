@@ -264,10 +264,14 @@ class Peer:
         return self.send_msg(msg)
 
     def send_interested(self):
+        """also sets our state to interested"""
+        self.am_interested = True
         msg = struct.pack(f"!IB", 1, MessageType.INTERESTED.value)
         return self.send_msg(msg)
     
     def send_not_interested(self):
+        """also sets our state to not interested"""
+        self.am_interested = False
         msg = struct.pack(f"!IB", 1, MessageType.NOT_INTERESTED.value)
         return self.send_msg(msg)
 
@@ -286,21 +290,32 @@ class Peer:
         return self.send_msg(msg)
 
     def send_request(self, piece: Piece, offset, length):
+        """also takes care of the outgoing requests list"""
         index = piece.index
         msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
         self.outgoing_requests.append((index, offset, length))
         return self.send_msg(msg)
 
     def send_piece(self, index, offset, data):
-        """sends data, passed in as bytes, as well as the index and offset of it"""
-        msg_len = len(data) + 9
-        msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)
-        return self.send_msg(msg)
+        """sends data, passed in as bytes, as well as the index and offset of it
+        also takes care of the incoming requests list"""
+        tup = (index, offset, data)
+        if tup in self.incoming_requests:
+            msg_len = len(data) + 9
+            msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)
+            self.incoming_requests.remove(tup)
+            return self.send_msg(msg)
+        return Status.FAILURE
 
     def send_cancel(self, piece: Piece, offset, length):
+        """ Also takes care of the outgoing requests list"""
         index = piece.index
-        msg = struct.pack(f"!IBIII", 13, MessageType.CANCEL.value, index, offset, length)
-        return self.send_msg(msg)
+        tup = (index, offset, length)
+        if tup in self.outgoing_requests:
+            self.outgoing_requests.remove(tup)
+            msg = struct.pack(f"!IBIII", 13, MessageType.CANCEL.value, index, offset, length)
+            return self.send_msg(msg)
+        return Status.FAILURE
 
     def send_msg(self, msg):
         """
