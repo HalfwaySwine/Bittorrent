@@ -298,7 +298,7 @@ class Peer:
 
     def send_piece(self, index, offset, data):
         """sends data, passed in as bytes, as well as the index and offset of it
-        also takes care of the incoming requests list"""
+        also takes care of the incoming requests list, if it wasn't in there, fail"""
         tup = (index, offset, data)
         if tup in self.incoming_requests:
             msg_len = len(data) + 9
@@ -308,7 +308,7 @@ class Peer:
         return Status.FAILURE
 
     def send_cancel(self, piece: Piece, offset, length):
-        """ Also takes care of the outgoing requests list"""
+        """ Also takes care of the outgoing requests list, if we didn't request it before, fail"""
         index = piece.index
         tup = (index, offset, length)
         if tup in self.outgoing_requests:
@@ -345,7 +345,7 @@ class Peer:
         Sends a choke message to peer and stores that state if peer is currently unchoked. Otherwise, does nothing.
         """
         if self.am_choking == True:
-            return
+            return Status.FAILURE
         msg = struct.pack(f"!IB", 1, MessageType.CHOKE.value)
         self.am_choking = True
         return self.send_msg(msg)
@@ -355,7 +355,7 @@ class Peer:
         Sends an unchoke message to peer if peer is currently choked, otherwise, does nothing.
         """
         if self.am_choking == False:
-            return
+            return Status.FAILURE
         msg = struct.pack(f"!IB", 1, MessageType.UNCHOKE.value)
         self.am_choking = False
         return self.send_msg(msg)
