@@ -46,7 +46,12 @@ peer.receive_messages()
 print(peer.received_handshake)
 print("can send bitfield: ", peer.can_send_bitfield)
 peer.send_interested()
-
+peer.send_keepalive()
+# peer.send_not_interested()
+# peer.unchoke()
+# peer.choke()
+# peer.send_piece(1, 1, b'21349023849328203859')
+# peer.send_cancel(piece, 1, 1)
 # look in wireshark to see if packet is as intended
 i = 0
 while True:

@@ -260,7 +260,7 @@ class Peer:
         return 1
     
     def send_keepalive(self):
-        msg = struct.pack(f"!I", 0)
+        msg = struct.pack("!4x")
         return self.send_msg(msg)
 
     def send_interested(self):
@@ -332,6 +332,7 @@ class Peer:
         if self.am_choking == True:
             return
         msg = struct.pack(f"!IB", 1, MessageType.CHOKE.value)
+        self.am_choking = True
         return self.send_msg(msg)
 
     def unchoke(self):
@@ -341,13 +342,14 @@ class Peer:
         if self.am_choking == False:
             return
         msg = struct.pack(f"!IB", 1, MessageType.UNCHOKE.value)
+        self.am_choking = False
         return self.send_msg(msg)
 
-    def send_keepalive(self):
+    def send_keepalive_if_needed(self):
         if not self.is_connected or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
             return  # Keepalive is not necessary
         else:
-            raise NotImplementedError("This function has not been implemented yet.")
+            self.send_keepalive()
 
     def establish_new_epoch(self):
         self.bytes_received = 0
