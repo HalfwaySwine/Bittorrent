@@ -6,6 +6,11 @@ from ..config import LOG_FILENAME, LOG_DIRECTORY
 
 logger = logging.getLogger(LOG_FILENAME)
 
+from enum import Enum
+class Status(Enum):
+    SUCCESS = "Success"
+    FAILURE = "Failure"
+    IN_PROGRESS = "In Progress"
 
 def configure_logging():
     """

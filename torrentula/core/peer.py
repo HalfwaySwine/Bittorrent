@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from enum import Enum
 from ..config import PEER_INACTIVITY_TIMEOUT_SECS
-from ..utils.helpers import logger
+from ..utils.helpers import logger, Status
 import socket
 import struct
+
 
 class MessageType(Enum):
     CHOKE = 0
@@ -16,6 +17,7 @@ class MessageType(Enum):
     PIECE = 7
     CANCEL = 8
 
+
 class Handshake(Enum):
     # didn't receive handshake
     HANDSHAKE_NOT_RECVD = 0
@@ -25,13 +27,12 @@ class Handshake(Enum):
     HANDSHAKE_RECVD = 2
 
 
-
 class Peer:
     """
     Represents a peer Bittorrent client in the same swarm.
     """
 
-    def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, socket=None, v4=True):
+    def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, v4=True):
         """
         Socket argument is provided when the client accepted this connection from a peer rather than initiaiting it.
         bitfield_length is the number of pieces in the torrent
@@ -40,11 +41,11 @@ class Peer:
         # IPv6 connections addr is a tuple: (hostname_or_ip, port, flowinfo, scopeid)
         if v4:
             self.addr = (ip_address, port)
-        else :
+        else:
             self.addr = (ip_address, port, 0, 0)
 
-        self.socket = socket  # Value is None when this peer is disconnected.
-        self.bitfield = [0] * bitfield_length # Initialized to all 0 for the length of the torrent
+        self.socket = None  # Value is None when this peer is disconnected.
+        self.bitfield = [0] * bitfield_length  # Initialized to all 0 for the length of the torrent
 
         # Connections start out choked and not interested.
         self.am_interested = False
@@ -56,23 +57,40 @@ class Peer:
         self.bytes_received = 0
         self.bytes_sent = 0
 
-        self.active_requests = [] # List of pieces that we have requested from the peer but have not completed.
-        self.target_piece = None # Piece from peer we are currently requesting.
-        self.last_received = None # Time of last message received from peer
-        self.last_sent = None # Time of last message sent to peer
+        self.active_requests = []  # List of pieces that we have requested from the peer but have not completed.
+        self.target_piece = None  # Piece from peer we are currently requesting.
+        self.last_received = None  # Time of last message received from peer
+        self.last_sent = None  # Time of last message sent to peer
 
-        self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD # check if we recieved a handshake or not
-        self.info_hash = info_hash # we keep an info hash here to send and check when received
-        self.peer_id = peer_id # we keep a peer_id here in the case of them receiving 
-        self.sent_handshake = False # needed to differentiate if we initiate or they initiate connection
-        self.can_send_bitfield = False # client checks and handles sending bitfields
+        self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD  # check if we recieved a handshake or not
+        self.info_hash: bytes = info_hash  # we keep an info hash here to send and check when received
+        self.peer_id: str = peer_id  # we keep a peer_id here in the case of them receiving
+        self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
+        self.can_send_bitfield = False  # client checks and handles sending bitfields
+        self.is_connected = False
 
     def connect(self):
-        """ 
+        """
         Should throw an error on fail.
         """
-        self.socket.connect(self.addr)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setblocking(False)
+        try:
+            logger.debug(f"Attempting to connect to peer at {self.addr}...")
+            self.last_sent = datetime.now()
+            self.last_received = datetime.now()
+            self.socket.connect(self.addr)
+        except BlockingIOError as e:
+            logger.info(f"Connection in progress to peer at {self.addr}")
+            return Status.IN_PROGRESS
+        except Exception as e:
+            logger.info(f"Error connecting to peer at {self.addr}")
+            self.socket.close()
+            self.socket = None
+            return Status.FAILURE
 
+        logger.debug(f"Successfully connected to peer at {self.addr}...")
+        return Status.SUCCESS
 
     def disconnect(self):
         """
@@ -89,7 +107,9 @@ class Peer:
         pstrlen = len(pstr)
         # ! = big endian, B = unsigned char, then string s, then 8 padding 0s, then 2 20 length strings
         # I don't expect to use these 8 padding bytes
-        msg = struct.pack(f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode('utf-8'), self.info_hash, self.peer_id)
+        msg = struct.pack(
+            f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode("utf-8"), self.info_hash, self.peer_id.encode("utf-8")
+        )
         self.send_msg(msg)
         self.sent_handshake = True
 
@@ -123,17 +143,17 @@ class Peer:
                 logger.debug(f"connection closed, disconnecting")
                 self.disconnect()
                 return -1
-            
+
             pstrlen = int.from_bytes(pstrlen_bytes)
             bytes = self.socket.recv(pstrlen + 48)
             if len(bytes) == 0:
                 logger.debug(f"connection closed, disconnecting")
                 self.disconnect()
                 return -1
-            
+
             pstr, padding, info_hash, peer_id = struct.unpack(f"!{pstrlen}s8s20s20s", bytes)
             logger.debug(f"received {pstr}, {padding}, {info_hash}, {peer_id}")
-            # may want to do smth with pstr, padding, and peer_id 
+            # may want to do smth with pstr, padding, and peer_id
             # but rn I only care about checking info_hash
             if info_hash != self.info_hash:
                 self.disconnect()
@@ -153,11 +173,11 @@ class Peer:
                 logger.debug(f"connection closed, disconnecting")
                 self.disconnect()
                 return -1
-            
+
             msg_len = int.from_bytes(msg_len_bytes, "big")
             logger.debug(f"recieved msg len: {msg_len}")
             # differentiating from keepalive, we don't have to do anything if it's a keepalive
-            if (msg_len > 0):
+            if msg_len > 0:
                 msg = b""
                 while len(msg) < msg_len:
 
@@ -167,7 +187,7 @@ class Peer:
                         logger.debug(f"connection closed, disconnecting")
                         self.disconnect()
                         return -1
-                    
+
                     msg += section
 
                 msg_type = int.from_bytes(msg[0:1], "big")
@@ -230,7 +250,7 @@ class Peer:
         Send the bitfield that we have
         """
         bitfield_length = len(bitfield)
-        msg_length = len(bitfield) + 1 
+        msg_length = len(bitfield) + 1
         msg = struct.pack(f"!IB{bitfield_length}s", msg_length, MessageType.BITFIELD.value, bitfield)
         self.send_msg(msg)
 
@@ -257,7 +277,7 @@ class Peer:
             return
 
     def send_keepalive(self):
-        if self.socket is None or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+        if not self.is_connected or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
             return  # Keepalive is not necessary
         else:
             raise NotImplementedError("This function has not been implemented yet.")
@@ -265,3 +285,7 @@ class Peer:
     def establish_new_epoch(self):
         self.bytes_received = 0
         self.bytes_sent = 0
+
+    def disconnect_if_timeout(self):
+        if self.socket and datetime.now() - self.last_received > timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+            self.disconnect()

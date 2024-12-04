@@ -87,6 +87,9 @@ class Strategy:
         return choice(peers)
 
     @classmethod
-    def determine_additional_peers(cls, file, peers):
-        if len(peers) < MIN_CONNECTED_PEERS:
-            return MAX_CONNECTED_PEERS - len(peers)
+    def determine_additional_peers(cls, file, peers: list[Peer]):
+        connected_peers = [peer for peer in peers if peer.is_connected]
+        if len(connected_peers) < MIN_CONNECTED_PEERS:
+            return MAX_CONNECTED_PEERS - len(connected_peers)
+        else:
+            return 0

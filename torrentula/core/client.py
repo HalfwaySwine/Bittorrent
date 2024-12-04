@@ -1,4 +1,4 @@
-from ..utils.helpers import logger
+from ..utils.helpers import logger, Status
 from ..config import (
     EPOCH_DURATION_SECS,
     PEER_ID_LENGTH,
@@ -59,11 +59,11 @@ class Client:
         # Extracts announce url from the torrent file and sets up the Tracker class.
         announce_url = torrent_data[b"announce"].decode()
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
-        self.tracker = Tracker(announce_url, self.peer_id, quote_plus(self.info_hash))
+        hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
+        self.tracker = Tracker(announce_url, self.peer_id, self.info_hash, len(hashes))
         # Extracts file metadata from torrent file and sets up the File class.
         self.filename = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
-        hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
         piece_length = int(torrent_data[b"info"][b"piece length"])
         assert len(hashes) * piece_length == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
@@ -104,7 +104,9 @@ class Client:
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
+        # Main event loop
         while not self.file.complete():
+            self.add_peers()
             self.accept_peers()
             self.receive_messages()
             completed_pieces = self.file.update_bitfield()
@@ -150,7 +152,7 @@ class Client:
         timeout = 0
         assert self.sock.fileno() > 0
         rdy, _, _ = select.select([self.sock], [], [], timeout)
-        connected_peers = len([peer for peer in self.peers if peer.socket is not None])
+        connected_peers = len([peer for peer in self.peers if peer.is_connected])
         while rdy and connected_peers < MAX_CONNECTED_PEERS:  # Accept up to the maximum number of peers
             sock, addr = self.sock.accept()
             self.peers.append(Peer(addr[0], addr[1], sock, True))
@@ -163,13 +165,29 @@ class Client:
             self.sock.close()
 
     def add_peers(self):
+        # Start establishment of connections to peers
         additional_peers = self.strategy.determine_additional_peers(self.file, self.peers)
         if additional_peers > 0:
+            logger.debug(f"Attempting to connect to {additional_peers} additional peers...")
             # Check if we know of any peers that aren't connected
             not_connected = [peer for peer in self.peers if peer.socket is None]
             for peer in not_connected:
-                peer.connect()
+                if peer.connect() == Status.SUCCESS:
+                    assert False, "Unexpected instantaneous connection success."
+
             # self.tracker.request_peers(): TODO
+
+        # Check for peers that have accepted the connection
+        connections_in_progress: list[Peer] = [
+            peer for peer in self.peers if peer.socket is not None and not peer.is_connected
+        ]
+        pending_peers = {peer.socket: peer for peer in connections_in_progress}
+        _, writable, _ = select.select([], pending_peers.keys(), [], 0)
+        for sock in writable:
+            peer = pending_peers[sock]
+            peer.is_connected = True
+            logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
+            peer.handshake()
 
     def send_haves(self, completed_pieces):
         """
@@ -193,12 +211,13 @@ class Client:
                 peer.send_request(peer.target_piece, offset, length)
 
     def receive_messages(self):
-        ready_peers, _, _ = select.select([peer.socket for peer in self.peers if peer.socket is not None], [], [], 0)
-        for peer in ready_peers:
-            peer.receive_messages()
-        check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.socket is not None]
+        sockets_and_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
+        ready_peers, _, _ = select.select(sockets_and_peers.keys(), [], [], 0)
+        for socket in ready_peers:
+            sockets_and_peers[socket].receive_messages()
+        check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.is_connected]
         for peer in check_liveness:
-            peer.check_timeout()
+            peer.disconnect_if_timeout()
 
     def display_peers(self):
         """
