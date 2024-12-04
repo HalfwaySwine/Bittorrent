@@ -298,7 +298,7 @@ class Peer:
 
     def send_piece(self, index, offset, data):
         """sends data, passed in as bytes, as well as the index and offset of it
-        also takes care of the incoming requests list"""
+        also takes care of the incoming requests list, if it wasn't in there, fail"""
         tup = (index, offset, data)
         if tup in self.incoming_requests:
             msg_len = len(data) + 9
@@ -308,7 +308,7 @@ class Peer:
         return Status.FAILURE
 
     def send_cancel(self, piece: Piece, offset, length):
-        """ Also takes care of the outgoing requests list"""
+        """ Also takes care of the outgoing requests list, if we didn't request it before, fail"""
         index = piece.index
         tup = (index, offset, length)
         if tup in self.outgoing_requests:
