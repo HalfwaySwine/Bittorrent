@@ -1,6 +1,7 @@
 import hashlib
 from .block import Block
 import time
+from ..utils.helpers import logger, Status
 
 BLOCK_SIZE = 16 * 1024  # standard block size we will request 16kb
 TIME_OUT = 5  # change to what we need it to be later
@@ -46,15 +47,19 @@ class Piece:
         self.torrentLength = torrentLength  # length listed in torrent file
         self.torrentPath = torrentPath
 
-    # gets the next offset and length to ask the peer for for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
+    # gets the next offset and length to ask the peer for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
     def get_next_request(self):
+        logger.debug("attempting to get next request")
         if self.complete: 
+            logger.info("status of Get_next_request(): already complete")
             return (None, None)
         if self.length < BLOCK_SIZE:  # if last piece is smaller than the block size
             if 0 not in self.blocks:
                 self.pendingRequests[0] = time.time()
+                logger.info(f"status of Get_next_request(): 0 {self.length} Last piece is smaller than block")
                 return (0, self.length)
+            logger.info("status of Get_next_request(): None None Last piece is smaller than block")
             return (None, None)
 
         for offset in range(0, self.length, BLOCK_SIZE):
@@ -66,24 +71,30 @@ class Piece:
                         lengthToRetun = lastLength
                     # add to pending requests or update time
                     self.pendingRequests[offset] = time.time()
+                    logger.info(f"status of Get_next_request(): {offset} {lengthToRetun}")
                     return (offset, lengthToRetun)
+        logger.info("status of Get_next_request(): None None")
         return (None, None)
 
     # checks if its been to long since it requested this block if so needs to re request it (helper fucntion)
     # returns true if it needs to be requested
     def _check_if_already_asked(self, offset):
         if offset not in self.pendingRequests:
+            logger.debug("Not already pending this request")
             return True
         else:
             # checks if timestamp is still valid
             timeSinceRequest = time.time() - self.pendingRequests[offset]
             if timeSinceRequest > TIME_OUT:
+                logger.debug("Timeout on this request")
                 return True
+            logger.debug("No timeout on this request")
             return False
 
     # adds block to block data-structure
     # returns -1 if invalid hash (need to restart), 1 if added block successfully but not complete yet, 0 if added block and complete and done
     def add_block(self, offset, data):
+        logger.debug("Attempting to add block")
         blocktoAdd = Block(len(data), data)
         self.blocks[offset] = blocktoAdd
         self.downloaded += len(data)
@@ -100,9 +111,13 @@ class Piece:
                 self.pieceBuffer = None
                 self.downloaded = 0
                 self.complete = False
+                logger.info("Download done invalid hash")
+                logger.debug("Download done invalid hash")
                 return -1
             self._write_to_disk()
+            logger.info("Download Sone and Valid")
             return 0
+        logger.info("Download not done")
         return 1
 
     # Returns the percent of how close it is to downloading out of 100
@@ -111,16 +126,20 @@ class Piece:
 
     # gets the data in bytes that a peer requests from disk
     def get_data_from_file(self, offset, blockLength):
+        logger.debug("Attempting get_data_from_file()")
         try:
             with open(self.torrentPath, "r+b") as f:
                 f.seek((self.index * self.torrentLength) + offset)
                 data = f.read(blockLength)
+            logger.info("get_data_from_file retunred data")
             return data
         except Exception as e:
-            print("Error writing to disk: " + str(e))
+            print("Error reading from disk: " + str(e))
+            logger.debug("Error reading from disk")
 
     # forms complete buffer with data in block datastructure (helper fucntion)
     def _form_buffer(self):
+        logger.debug("Attempting form_buffer")
         self.pieceBuffer = bytearray(self.length)
         for offset, block in self.blocks.items():
             self.pieceBuffer[offset : offset + block.get_length()] = block.get_data()
@@ -132,12 +151,14 @@ class Piece:
 
     # writes offset of piece to file from recived response from peer
     def _write_to_disk(self):
+        logger.debug("Attempting write_to_disk")
         try:
             with open(self.torrentPath, "r+b") as f:
                 f.seek(self.index * self.torrentLength)
                 f.write(self.pieceBuffer)
         except Exception as e:
             print("Error writing to disk: " + str(e))
+            logger.debug("Error writing to disk")
 
     # returns string for debugging
     def __str__(self):

@@ -13,8 +13,10 @@ class File:
         self.destination = destination
         self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
+        logger.debug("Attepting to init pieces")
         self.pieces = [Piece(index, piece_length, hash, length, self.torrent_path) for index, hash in enumerate(hashes)]
         self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length #TODO check this
+        logger.debug(f"File - last piece length {length - (len(self.pieces) - 1) * piece_length}")
         self.length = length
         self.bitfield: list[int] = self.load_bitfield_from_disk()
 
@@ -24,31 +26,45 @@ class File:
 
     #writes the updated bitfield to the file
     def write_bitfield_to_disk(self):
+        logger.debug("attempting to wrtie bitfield to disk")
         """
         Writes bitfield to disk to save progress.
         """
-        with open(self.bitfield_path, "w") as file:
-            for bit in self.bitfield:
-                file.write(str(bit))
+        try:
+            with open(self.bitfield_path, "w") as file:
+                for bit in self.bitfield:
+                    file.write(str(bit))
+        except OSError as e:
+            print(f"Error writing bitfield to disk: {e}")
+            logger.debug("Error writing bitfield to disk")
 
 
     #loads or creates bitfield in file 
     def load_bitfield_from_disk(self):
+        logger.debug("attempting to load bitfield from disk")
         """
         Loads bitfield from disk (if it exists) to restart where previous download left off.
         """
-        if os.path.isfile(self.bitfield_path): #already there 
-            with open(self.bitfield_path, "r+") as file1:
-                bitfield = [int(char) for char in file1.read().strip()] 
+        try:
+            if os.path.isfile(self.bitfield_path): #already there 
+                with open(self.bitfield_path, "r+") as file1:
+                    bitfield = [int(char) for char in file1.read().strip()] 
+                    return bitfield
+            else: #doesn't exist yet 
+                bitfield = [0] * len(self.pieces)
+                with open(self.bitfield_path, "w") as file1:
+                    file1.write("".join(map(str, bitfield)))
                 return bitfield
-        else: #doesn't exist yet 
-            bitfield = [0] * len(self.pieces)
-            with open(self.bitfield_path, "w") as file1:
-                file1.write("".join(map(str, bitfield)))
-            return bitfield
+        except OSError as e:
+            print(f"Error accessing bitfield file: {e}")
+            logger.debug("Error accessing bitfield file")
+        except ValueError as e:
+            print(f"Error parsing bitfield data: {e}")
+            logger.debug("Error parsing bitfield data")
 
     #updated bitfield and checks for newly completed pieces to add and send 
     def update_bitfield(self):
+        logger.debug("attempting to update bitfield")
         """
         Scans through progress on pieces to update bitfield in memory and write it to disk to save any progress. Returns a list of indices representing newly completed pieces.
         """
@@ -60,6 +76,7 @@ class File:
 
         if not newly_completed:  # Bitfield was updated
             self.write_bitfield_to_disk()
+            logger.info("bitfield updated")
         return newly_completed
 
     #toString
@@ -107,6 +124,7 @@ class File:
 
     #calcs how many bytes are left of verified data
     def bytes_left(self) -> int:
+        logger.debug("attempting bytes left")
         """
         Returns the number of bytes this client still has left to download.   
         """
@@ -114,11 +132,13 @@ class File:
         for piece_index in self.get_missing_pieces():
             print(total)
             total += self.pieces[piece_index].length
+        logger.info(f"{total} bytes left")
         return total
         
     
     #calcs how many bytes have been downloaded of verfied data
     def bytes_downloaded(self) -> int:
+        logger.debug("attempting bytes downloaded")
         """
         Returns the number of bytes this client has downloaded 
         """
@@ -126,6 +146,7 @@ class File:
 
     #helper to get the bytes left/downloaded based on unverifed data (bytesLeft is boolean)
     def bytes_verified_unverfied(self, bytesLeft): 
+        logger.debug("attempting bytes downloaded/left v2")
         total = 0
         if bytesLeft: #gets bytes left
             for i in self.pieces:
