@@ -8,4 +8,5 @@ from .core.peer import Peer
 from .core.piece import Piece
 from .core.strategy import Strategy
 from .core.tracker import Tracker
+from .utils.helpers import *
 from .config import *

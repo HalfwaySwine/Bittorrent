@@ -159,6 +159,7 @@ class Client:
             connected_peers += 1
             logger.info(f"Connection established with peer: {addr}")
             rdy, _, _ = select.select([self.sock], [], [], timeout)
+            # TODO
 
     def close_socket(self):
         if self.sock:

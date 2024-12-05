@@ -68,7 +68,7 @@ class Strategy:
     def get_top_four(cls, peers: list[Peer]) -> list[Peer]:
         """
         Gets the top four ranking and interested peers in terms of bytes received within the last epoch.
-        Also includes any peers that are not interesteed but higher than the fourth place peer.
+        Also includes any peers that are not interested but higher than the fourth place peer.
         """
         peers_sorted = sorted(peers, key=lambda x: x.bytes_received)
         # Return the top peers but cut the list off after the fourth interested peer.
@@ -84,7 +84,8 @@ class Strategy:
 
     @classmethod
     def get_optimistic_unchoke(cls, peers: list[Peer]) -> Peer:
-        return choice(peers)
+        interested = [peer for peer in peers if peer.peer_interested]
+        return choice(interested) if interested else []
 
     @classmethod
     def determine_additional_peers(cls, file, peers: list[Peer]):
