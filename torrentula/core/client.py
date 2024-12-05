@@ -188,7 +188,7 @@ class Client:
             peer = pending_peers[sock]
             peer.is_connected = True
             logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
-            peer.handshake()
+            peer.send_handshake()
 
     def send_haves(self, completed_pieces):
         """
