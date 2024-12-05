@@ -34,7 +34,7 @@ Interface
 
 
 class Piece:
-    def __init__(self, index, length, hash, torrentLength, torrentPath):
+    def __init__(self, index, length, hash, torrentLength, torrentPath, fileDesc):
         self.index = index  # index of piece
         self.length = length  # length of entire piece (will be different for last piece)
         # blocks dictonary only used for reciving data key = offset, value = block class(data,length) however most ask for 16kb
@@ -46,6 +46,7 @@ class Piece:
         self.pendingRequests = {}  # key = offset value = timestamp keeps track of the offsets we have asked for
         self.torrentLength = torrentLength  # length listed in torrent file
         self.torrentPath = torrentPath
+        self.fileDesc = fileDesc #file to write to
 
     # gets the next offset and length to ask the peer for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
@@ -128,9 +129,9 @@ class Piece:
     def get_data_from_file(self, offset, blockLength):
         logger.debug("Attempting get_data_from_file()")
         try:
-            with open(self.torrentPath, "r+b") as f:
-                f.seek((self.index * self.torrentLength) + offset)
-                data = f.read(blockLength)
+            
+            self.fileDesc.seek((self.index * self.torrentLength) + offset)
+            self.fileDesc.read(blockLength)
             logger.info("get_data_from_file retunred data")
             return data
         except Exception as e:
@@ -153,9 +154,9 @@ class Piece:
     def _write_to_disk(self):
         logger.debug("Attempting write_to_disk")
         try:
-            with open(self.torrentPath, "r+b") as f:
-                f.seek(self.index * self.torrentLength)
-                f.write(self.pieceBuffer)
+            
+            self.fileDesc.seek(self.index * self.torrentLength)
+            self.fileDesc.write(self.pieceBuffer)
         except Exception as e:
             print("Error writing to disk: " + str(e))
             logger.debug("Error writing to disk")

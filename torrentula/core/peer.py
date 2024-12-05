@@ -62,8 +62,8 @@ class Peer:
         self.bytes_sent = 0
 
         self.outgoing_requests = []  # List of pieces that we have requested from the peer but have not completed.
-        self.incoming_requests = [] # list of incoming requests
-        self.target_piece : Piece = None  # Piece from peer we are currently requesting.
+        self.incoming_requests = []  # list of incoming requests
+        self.target_piece: Piece = None  # Piece from peer we are currently requesting.
         self.last_received = None  # Time of last message received from peer
         self.last_sent = None  # Time of last message sent to peer
 
@@ -72,7 +72,7 @@ class Peer:
         self.peer_id: str = peer_id  # we keep a peer_id here in the case of them receiving
         self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
         self.can_send_bitfield = False  # client checks and handles sending bitfields
-        self.is_connected = False # self explanatory, if we have a socket and this is false, connection is ongoing
+        self.is_connected = False  # self explanatory, if we have a socket and this is false, connection is ongoing
 
     def connect(self):
         """
@@ -104,7 +104,7 @@ class Peer:
         self.socket.close()
 
         # reset most parameters, maybe have to add some
-        self.outgoing_requests = [] # reset list, we don't expect requests to be fulfilled 
+        self.outgoing_requests = []  # reset list, we don't expect requests to be fulfilled
         self.incoming_requests = []
         self.socket = None
         self.is_connected = False
@@ -116,7 +116,7 @@ class Peer:
         self.am_choking = True
         self.peer_interested = False
         self.peer_choking = True
-        self.bitfield = [0] * self.bitfield_length 
+        self.bitfield = [0] * self.bitfield_length
         self.bytes_received = 0
         self.bytes_sent = 0
 
@@ -133,13 +133,12 @@ class Peer:
         )
         self.sent_handshake = True
         return self.send_msg(msg)
-        
 
     # was handled in receive_messages
     # def download(self, block):
     #     pass
 
-    def receive_messages(self):
+    def receive_messages_helper(self):
         """
         Assuming we do the select outside of receive_messages - just handle messages here
         if we haven't received a handshake we expect a handshake before anything else
@@ -149,6 +148,7 @@ class Peer:
         This code does not really handle blocking problems on recv, could cause issues in the future
         we also don't really handle unexpected recvs, could cause some erroring that may need to be caught
         """
+        logger.debug(f"Receiving message from {self.addr}...")
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
 
             pstrlen_bytes = self.socket.recv(1)
@@ -193,7 +193,7 @@ class Peer:
             if msg_len > 0:
                 msg = b""
                 while len(msg) < msg_len:
-                    # wait one second, otherwise timeout. If we ever timeout, 
+                    # wait one second, otherwise timeout. If we ever timeout,
                     # this macgyver solution will not really work because we kinda block too long.
                     rdy, _, _ = select.select([self.socket], [], [], 1)
 
@@ -202,7 +202,7 @@ class Peer:
                         logger.debug("WARNING: timed out on receive_messages, our implementation is gonna be slow")
                         self.disconnect()
                         return Status.FAILURE
-                    
+
                     section = self.socket.recv(msg_len - len(msg))
                     # recv returns an empty bytes object when the connection is closed
                     if len(section) == 0:
@@ -257,8 +257,16 @@ class Peer:
                     if tup in self.incoming_requests:
                         self.incoming_requests.remove(tup)
         self.last_received = datetime.now()
-        return 1
-    
+        return Status.SUCCESS
+
+    def receive_messages(self):
+        try:
+            return self.receive_messages_helper()
+        except Exception as e:
+            logger.debug(f"receive_messages failed, disconnecting")
+            self.disconnect()
+            return Status.FAILURE
+
     def send_keepalive(self):
         msg = struct.pack("!4x")
         return self.send_msg(msg)
@@ -268,7 +276,7 @@ class Peer:
         self.am_interested = True
         msg = struct.pack(f"!IB", 1, MessageType.INTERESTED.value)
         return self.send_msg(msg)
-    
+
     def send_not_interested(self):
         """also sets our state to not interested"""
         self.am_interested = False
@@ -308,7 +316,7 @@ class Peer:
         return Status.FAILURE
 
     def send_cancel(self, piece: Piece, offset, length):
-        """ Also takes care of the outgoing requests list, if we didn't request it before, fail"""
+        """Also takes care of the outgoing requests list, if we didn't request it before, fail"""
         index = piece.index
         tup = (index, offset, length)
         if tup in self.outgoing_requests:
@@ -331,14 +339,13 @@ class Peer:
         logger.debug(f"sending to {self.addr}:")
         logger.debug(msg)
         self.last_sent = datetime.now()
-        try: 
+        try:
             self.socket.sendall(msg)
         except Exception as _:
             logger.debug("message failed to send, disconnecting")
             self.disconnect()
             return Status.FAILURE
         return Status.SUCCESS
-            
 
     def choke(self):
         """

@@ -180,7 +180,7 @@ class Client:
 
         # Check for peers that have accepted the connection
         connections_in_progress: list[Peer] = [
-            peer for peesend_requestsr in self.peers if peer.socket is not None and not peer.is_connected
+            peer for peer in self.peers if peer.socket is not None and not peer.is_connected
         ]
         pending_peers = {peer.socket: peer for peer in connections_in_progress}
         _, writable, _ = select.select([], pending_peers.keys(), [], 0)
@@ -198,7 +198,7 @@ class Client:
 
     def send_keepalives(self):
         for peer in self.peers:
-            peer.send_keepalive()
+            peer.send_keepalive_if_needed()
 
     def send_requests(self):
         self.strategy.assign_pieces(self.file.get_missing_pieces(), self.peers)
