@@ -210,12 +210,18 @@ class Client:
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
         available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
         for peer in available_peers:
-            num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
-            for req in range(num_requests):
-                offset, length = self.file.pieces[peer.target_piece].get_next_request()
-                if offset is None or length is None:  # Target piece is complete
-                    break
-                peer.send_request(peer.target_piece, offset, length)
+            # add new check if piece is complete before doing anything, 
+            # reset target_piece if completed already
+            target_piece_object = self.file.pieces[peer.target_piece]
+            if target_piece_object.complete:
+                peer.target_piece = None
+            else:
+                num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
+                for req in range(num_requests):
+                    offset, length = target_piece_object.get_next_request()
+                    if offset is None or length is None:  # Target piece is complete
+                        break
+                    peer.send_request(peer.target_piece, offset, length)
 
     def send_interested(self):
         for peer in self.peers:

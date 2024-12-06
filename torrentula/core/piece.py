@@ -37,6 +37,7 @@ class Piece:
     def __init__(self, index, length, hash, torrentLength, torrentPath, fileDesc):
         self.index = index  # index of piece
         self.length = length  # length of entire piece (will be different for last piece)
+        self.default_piece_length = length # default piece length for index calculation, we only change self.length after the constructor
         # blocks dictonary only used for reciving data key = offset, value = block class(data,length) however most ask for 16kb
         self.blocks = {}
         self.complete = False  # flag to indicate whether all blocks of the piece are present
@@ -162,7 +163,7 @@ class Piece:
         logger.debug("Attempting write_to_disk")
         try:
             
-            self.fileDesc.seek(self.index * self.torrentLength)
+            self.fileDesc.seek(self.index * self.default_piece_length)
             self.fileDesc.write(self.pieceBuffer)
         except Exception as e:
             print("Error writing to disk: " + str(e))

@@ -247,7 +247,6 @@ class Peer:
                     tup = (index, offset, length)
                     if tup in self.outgoing_requests:
                         self.outgoing_requests.remove(tup)
-                        # this will error out
                         piece.add_block(offset, msg[9:])
                         self.bytes_received += length
                 if msg_type == MessageType.CANCEL.value:

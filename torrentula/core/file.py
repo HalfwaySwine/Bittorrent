@@ -16,7 +16,7 @@ class File:
         self.length = length
         self.initialize_file()
         logger.debug("Attepting to init pieces")
-        self.pieces = [
+        self.pieces: list[Piece] = [
             Piece(index, piece_length, hash, length, self.torrent_path, self.file) for index, hash in enumerate(hashes)
         ]
         self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length  # TODO check this
@@ -173,9 +173,10 @@ class File:
 
     def rename(self, new):
         """Renames the file. Used when the download is complete to remove the temporary suffix."""
-        old = Path(self.destination) / self.name
+        # changed to use torrent path, which includes the suffix
+        old = self.torrent_path
         os.rename(old, new)
-        logger.info("Renamed file from '{old}' to '{new}'.")
+        logger.info(f"Renamed file from '{old}' to '{new}'.")
 
     def remove_bitfield_from_disk(self):
         os.remove(self.bitfield_path)
