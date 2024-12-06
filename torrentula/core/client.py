@@ -49,8 +49,8 @@ class Client:
         try:
             with open(torrent_file, "rb") as f:
                 torrent_data = bencoder.bdecode(f.read())
-                logger.debug(f"Torrent '{torrent_file}' decoded:")
-                logger.debug(torrent_data)
+                # logger.debug(f"Torrent '{torrent_file}' decoded:")
+                # logger.debug(torrent_data)
         except Exception as e:
             print(f"Error: Could not decode torrent file '{torrent_file}'!")
             print(e)
@@ -114,6 +114,7 @@ class Client:
             self.send_haves(completed_pieces)
             self.send_requests()
             self.send_keepalives()
+            self.send_interested()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
                 self.establish_new_epoch()
         # Clean up resources
@@ -197,6 +198,8 @@ class Client:
         """
         Sends messages to peers inform them that we have acquired new pieces.
         """
+        # note: shouldn't we send new pieces only once to each peer? 
+        # maybe we should keep track of pieces we already have notified peers of.
         self.strategy.send_haves(completed_pieces, self.file.bitfield, self.peers)
 
     def send_keepalives(self):
@@ -207,12 +210,21 @@ class Client:
         self.strategy.assign_pieces(self.file.get_missing_pieces(), self.peers)
         available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
         for peer in available_peers:
-            num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.active_requests)
+            num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
             for req in range(num_requests):
                 offset, length = self.file.pieces[peer.target_piece].get_next_request()
                 if offset is None or length is None:  # Target piece is complete
                     break
                 peer.send_request(peer.target_piece, offset, length)
+
+    def send_interested(self):
+        for peer in self.peers:
+            if peer.is_connected and peer.am_interested == False:
+                for index in self.file.get_missing_pieces():
+                    if peer.bitfield[index] == 1:
+                        peer.send_interested()
+                        break
+
 
     def receive_messages(self):
         sockets_and_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}

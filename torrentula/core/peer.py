@@ -63,7 +63,7 @@ class Peer:
 
         self.outgoing_requests = []  # List of pieces that we have requested from the peer but have not completed.
         self.incoming_requests = []  # list of incoming requests
-        self.target_piece: Piece = None  # Piece from peer we are currently requesting.
+        self.target_piece = None  # Piece from peer we are currently requesting, is an int index.
         self.last_received = None  # Time of last message received from peer
         self.last_sent = None  # Time of last message sent to peer
 
@@ -247,6 +247,7 @@ class Peer:
                     tup = (index, offset, length)
                     if tup in self.outgoing_requests:
                         self.outgoing_requests.remove(tup)
+                        # this will error out
                         self.target_piece.add_block(offset, msg[9:])
                         self.bytes_received += length
                 if msg_type == MessageType.CANCEL.value:
@@ -297,9 +298,8 @@ class Peer:
         msg = struct.pack(f"!IB{bitfield_length}s", msg_length, MessageType.BITFIELD.value, bitfield)
         return self.send_msg(msg)
 
-    def send_request(self, piece: Piece, offset, length):
+    def send_request(self, index, offset, length):
         """also takes care of the outgoing requests list"""
-        index = piece.index
         msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
         self.outgoing_requests.append((index, offset, length))
         return self.send_msg(msg)
@@ -315,9 +315,8 @@ class Peer:
             return self.send_msg(msg)
         return Status.FAILURE
 
-    def send_cancel(self, piece: Piece, offset, length):
+    def send_cancel(self, index, offset, length):
         """Also takes care of the outgoing requests list, if we didn't request it before, fail"""
-        index = piece.index
         tup = (index, offset, length)
         if tup in self.outgoing_requests:
             self.outgoing_requests.remove(tup)

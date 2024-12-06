@@ -50,7 +50,8 @@ class Strategy:
                 has_pieces.append(piece)
             if len(has_pieces) == NUM_RAREST_PIECES:
                 break
-        return choice(has_pieces) if not has_pieces.is_empty() else None
+        # bugfix: we wanted to check if has_pieces was not empty, this accomplishes that
+        return choice(has_pieces) if has_pieces else None
 
     @classmethod
     def calculate_rarest_pieces(cls, peers: list[Peer]) -> list[int]:
