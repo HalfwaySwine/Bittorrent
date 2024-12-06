@@ -1,6 +1,7 @@
 from .peer import Peer
 from random import choice
 from ..config import MIN_CONNECTED_PEERS, MAX_CONNECTED_PEERS, NUM_RAREST_PIECES
+from ..utils.helpers import logger
 
 
 class Strategy:
@@ -17,14 +18,16 @@ class Strategy:
         """
         Given a list of peers (which contains their bitfields and whether they've unchoked us) and remaining pieces to download, returns a list of the rarest pieces to request from each.
         """
-        rarest_pieces = Strategy.calculate_rarest_pieces(peers)
-        if not rarest_pieces:
+        rarest_pieces: list[int] = Strategy.calculate_rarest_pieces(peers)
+        # Remove pieces we've already downloaded.
+        rarest_pieces_left: list[int] = [piece_index for piece_index in rarest_pieces if piece_index in remaining_pieces]
+        if not rarest_pieces_left: # None of the peers have pieces we need.
             return
         unchoked_waiting_peers = [
             peer for peer in peers if not peer.peer_choking and peer.am_interested and peer.target_piece is None
         ]
         for peer in unchoked_waiting_peers:
-            peer.target_piece = Strategy.choose_rarest_piece_with_randomness(rarest_pieces, peer)
+            peer.target_piece = Strategy.choose_rarest_piece_with_randomness(rarest_pieces_left, peer)
             assert (
                 peer.target_piece is not None
             ), "Client should not be interested in a peer that has no desired pieces."
@@ -91,6 +94,7 @@ class Strategy:
     @classmethod
     def determine_additional_peers(cls, file, peers: list[Peer]):
         connected_peers = [peer for peer in peers if peer.is_connected]
+        logger.debug(f"Currently connected to {len(connected_peers)} peers")
         if len(connected_peers) < MIN_CONNECTED_PEERS:
             return MAX_CONNECTED_PEERS - len(connected_peers)
         else:

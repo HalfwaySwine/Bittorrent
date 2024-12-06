@@ -24,24 +24,22 @@ class File:
         self.bitfield: list[int] = self.load_bitfield_from_disk()
 
     def initialize_file(self):
-        if os.path.exists(self.torrent_path):
-            self.file = open(self.torrent_path, "rb+") #opens without overwriting 
+        if os.path.exists(self.torrent_path):  # Open existing file without overwriting
+            self.file = open(self.torrent_path, "rb+")
             logger.debug("In-progress download file already exists.")
-        else:
-            self.file = open(self.torrent_path, "wb+") #creates a new 
+        else:  # Create a new empty file
+            self.file = open(self.torrent_path, "wb+")
             self.file.write(b"\x00" * self.length)
             logger.debug(f"Created empty in-progress download file with size {self.length}.")
 
-    # returns bitfield
     def get_bitfield(self):
         return self.bitfield
 
-    # writes the updated bitfield to the file
     def write_bitfield_to_disk(self):
-        logger.debug("Attempting to write bitfield to disk")
         """
         Writes bitfield to disk to save progress.
         """
+        logger.debug("Attempting to write bitfield to disk")
         try:
             with open(self.bitfield_path, "w") as file:
                 for bit in self.bitfield:
@@ -50,7 +48,6 @@ class File:
             print(f"Error writing bitfield to disk: {e}")
             logger.debug("Error writing bitfield to disk")
 
-    # loads or creates bitfield in file
     def load_bitfield_from_disk(self):
         logger.debug("attempting to load bitfield from disk")
         """
@@ -87,101 +84,98 @@ class File:
             logger.debug("Attempting to update bitfield...")
             self.write_bitfield_to_disk()
             logger.debug("Bitfield updated!")
+            logger.info(
+                f"{self.total_downloaded_percentage()}% downloaded (verified), {self.total_downloaded_unverified_percentage()}% downloaded (unverified)"
+            )
         return newly_completed
 
-    # toString
     def __str__(self):
         print("===Overall===")
-        print(f"Progress: {self.get_total_downloaded()} / {self.length}")
+        print(f"Progress: {self.bytes_downloaded()} / {self.length}")
 
         print("===Pieces===")
         for index, piece in enumerate(self.pieces):
             print(index, ": ", piece)
 
-    # returns list of download precents per piece
-    def get_download_percents(self) -> str:
+    def piece_download_percentages(self) -> str:
+        """Returns a list of download percentages by piece."""
         return [piece.get_download_percent() for piece in self.pieces]
-    
-    #get total download precent for unverfied data
-    def get_total_download_precent(self): 
-        total = 0 
-        for i in self.pieces: 
-            total += i.downloaded
-        total = (total/self.length) *  100
-        return total
 
-    # gets downloaded amount from piece
-    def get_total_downloaded(self) -> str:
-        total = 0
-        for piece in self.pieces:
-            total += piece.downloaded
-        return total
+    def total_downloaded_percentage(self):
+        """Get total download percent for verified data"""
+        return (self.bytes_downloaded_unverified / self.length) * 100
 
-    # checks if file has piece undownloaded (helper)
-    def get_missing_pieces(self):
+    def total_downloaded_unverified_percentage(self):
+        """Get total download percent for unverified data"""
+        return (self.bytes_downloaded_unverified / self.length) * 100
+
+    def missing_pieces(self):
+        """Returns a list of pieces that have not yet been fully downloaded and/or verified."""
         missing = []
         for index, bit in enumerate(self.bitfield):
             if bit == 0:
                 missing.append(index)
         return missing
 
-    # checks if file has piece downloaded (helper)
-    def get_has_pieces(self):
+    def has_pieces(self):
+        """Returns a list of pieces that have been downloaded and verified."""
         has = []
         for index, bit in enumerate(self.bitfield):
             if bit == 1:
                 has.append(index)
         return has
 
-    # returns true or false if file is complete
     def complete(self) -> bool:
         """Returns True if file is complete, False otherwise."""
-        return self.get_missing_pieces() == []
+        return self.missing_pieces() == []
 
-    # calcs how many bytes are left of verified data
     def bytes_left(self) -> int:
-        logger.debug("attempting bytes left")
         """
-        Returns the number of bytes this client still has left to download.   
+        Returns the number of bytes this client still has left to download (based on verified data).
         """
+        logger.debug("Calculating bytes left...")
         total = 0
-        for piece_index in self.get_missing_pieces():
+        for piece_index in self.missing_pieces():
             print(total)
             total += self.pieces[piece_index].length
-        logger.info(f"{total} bytes left")
+        logger.debug(f"{total} bytes left")
         return total
 
-    # calcs how many bytes have been downloaded of verfied data
     def bytes_downloaded(self) -> int:
-        logger.debug("attempting bytes downloaded")
         """
-        Returns the number of bytes this client has downloaded 
+        Returns the number of bytes this client has downloaded that have also been verified.
         """
-        return sum(self.pieces[piece_index].length for piece_index in self.get_has_pieces())
-
-    # helper to get the bytes left/downloaded based on unverifed data (bytesLeft is boolean)
-    def bytes_verified_unverified(self, bytesLeft):
-        logger.debug("attempting bytes downloaded/left v2")
-        total = 0
-        if bytesLeft:  # gets bytes left
-            for i in self.pieces:
-                total += i.length - i.downloaded
-        else:  # gets bytes downloaded
-            for i in self.pieces:
-                total += i.downloaded
+        total = sum(self.pieces[piece_index].length for piece_index in self.has_pieces())
+        logger.debug(f"{total} bytes downloaded")
         return total
 
-    # removes the .part when the file is complete
+    def bytes_left_unverified(self):
+        """
+        Returns the number of bytes this client still has left to download (based on unverified data).
+        """
+        total = self.length - self.bytes_downloaded_unverified()
+        logger.debug("{total} bytes left (based on unverified data)")
+        return total
+
+    def bytes_downloaded_unverified(self):
+        """
+        Returns the number of bytes this client still has downloaded (based on unverified data).
+        """
+        total = 0
+        for piece in self.pieces:
+            total += piece.downloaded
+        logger.debug("{total} bytes downloaded (based on unverified data)")
+        return total
+
     def rename(self, new):
+        """Renames the file. Used when the download is complete to remove the temporary suffix."""
         old = Path(self.destination) / self.name
         os.rename(old, new)
         logger.info("Renamed file from '{old}' to '{new}'.")
 
-    # removes bitfield from file
     def remove_bitfield_from_disk(self):
         os.remove(self.bitfield_path)
         logger.info("Removed bitfield from disk.")
 
-    #closes file
-    def close_file(self): 
+    def close_file(self):
         self.file.close()

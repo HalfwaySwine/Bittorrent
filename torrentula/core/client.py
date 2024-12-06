@@ -106,7 +106,6 @@ class Client:
         self.epoch_start_time = datetime.now()
         # Main event loop
         while not self.file.complete():
-            logger.info(f"Download precent = {self.file.get_total_download_precent()}")
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
@@ -119,12 +118,11 @@ class Client:
                 self.establish_new_epoch()
         # Clean up resources
         self.cleanup()
-        
+
         if self.file.complete():  # If file is complete, rename file to real name and delete bitfield.
             path = Path(self.destination)
             self.file.rename(path / self.filename)
             self.file.remove_bitfield_from_disk()
-            self.file.close_file() #closes file
             return True
         return False
 
@@ -156,14 +154,14 @@ class Client:
         timeout = 0
         assert self.sock.fileno() > 0
         rdy, _, _ = select.select([self.sock], [], [], timeout)
-        connected_peers = len([peer for peer in self.peers if peer.is_connected])
+        connected_peers: int = len([peer for peer in self.peers if peer.is_connected])
         while rdy and connected_peers < MAX_CONNECTED_PEERS:  # Accept up to the maximum number of peers
             sock, addr = self.sock.accept()
-            self.peers.append(Peer(addr[0], addr[1], sock, True))
+            new_peer = Peer(addr[0], addr[1], self.info_hash, self.peer_id, len(self.file.bitfield), sock)
+            self.peers.append(new_peer)
             connected_peers += 1
             logger.info(f"Connection established with peer: {addr}")
-            rdy, _, _ = select.select([self.sock], [], [], timeout)
-            # TODO
+            rdy, _, _ = select.select([self.sock], [], [], timeout) # Poll again to check for more peers
 
     def close_socket(self):
         if self.sock:
@@ -173,12 +171,14 @@ class Client:
         # Start establishment of connections to peers
         additional_peers = self.strategy.determine_additional_peers(self.file, self.peers)
         if additional_peers > 0:
-            logger.debug(f"Attempting to connect to {additional_peers} additional peers...")
+            logger.debug(f"Has space for {additional_peers} additional peers")
             # Check if we know of any peers that aren't connected
             not_connected = [peer for peer in self.peers if peer.socket is None]
-            for peer in not_connected:
-                if peer.connect() == Status.SUCCESS:
-                    assert False, "Unexpected instantaneous connection success."
+            if not_connected:
+                logger.debug(f"Attempting to connect to {len(not_connected)} additional peers...")
+                for peer in not_connected:
+                    if peer.connect() == Status.SUCCESS:
+                        assert False, "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
 
             # self.tracker.request_peers(): TODO
 
@@ -198,7 +198,7 @@ class Client:
         """
         Sends messages to peers inform them that we have acquired new pieces.
         """
-        # note: shouldn't we send new pieces only once to each peer? 
+        # note: shouldn't we send new pieces only once to each peer?
         # maybe we should keep track of pieces we already have notified peers of.
         self.strategy.send_haves(completed_pieces, self.file.bitfield, self.peers)
 
@@ -207,7 +207,7 @@ class Client:
             peer.send_keepalive_if_needed()
 
     def send_requests(self):
-        self.strategy.assign_pieces(self.file.get_missing_pieces(), self.peers)
+        self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
         available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
         for peer in available_peers:
             num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
@@ -219,12 +219,11 @@ class Client:
 
     def send_interested(self):
         for peer in self.peers:
-            if peer.is_connected and peer.am_interested == False:
-                for index in self.file.get_missing_pieces():
+            if peer.is_connected and not peer.am_interested:
+                for index in self.file.missing_pieces():
                     if peer.bitfield[index] == 1:
                         peer.send_interested()
                         break
-
 
     def receive_messages(self):
         sockets_and_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
@@ -273,5 +272,6 @@ class Client:
         sys.exit(1)
 
     def cleanup(self):
+        self.file.close_file()
         self.tracker.disconnect()
         self.close_socket()
