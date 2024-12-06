@@ -138,6 +138,13 @@ class Piece:
             print("Error reading from disk: " + str(e))
             logger.debug("Error reading from disk")
 
+    def set_complete_from_prev_download(self): 
+        """
+        sets a piece to complete. This may be used to set a piece to complete based on a previous download
+        """
+        self.downloaded = self.length 
+        self.complete = True
+
     # forms complete buffer with data in block datastructure (helper fucntion)
     def _form_buffer(self):
         logger.debug("Attempting form_buffer")

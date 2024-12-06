@@ -138,7 +138,7 @@ class Peer:
     # def download(self, block):
     #     pass
 
-    def receive_messages_helper(self):
+    def receive_messages_helper(self, piece):
         """
         Assuming we do the select outside of receive_messages - just handle messages here
         if we haven't received a handshake we expect a handshake before anything else
@@ -248,7 +248,7 @@ class Peer:
                     if tup in self.outgoing_requests:
                         self.outgoing_requests.remove(tup)
                         # this will error out
-                        self.target_piece.add_block(offset, msg[9:])
+                        piece.add_block(offset, msg[9:])
                         self.bytes_received += length
                 if msg_type == MessageType.CANCEL.value:
                     info = msg[1:]
@@ -260,9 +260,9 @@ class Peer:
         self.last_received = datetime.now()
         return Status.SUCCESS
 
-    def receive_messages(self):
+    def receive_messages(self, piece):
         try:
-            return self.receive_messages_helper()
+            return self.receive_messages_helper(piece)
         except Exception as e:
             logger.debug(f"receive_messages failed, disconnecting")
             self.disconnect()

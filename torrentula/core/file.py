@@ -51,12 +51,16 @@ class File:
     def load_bitfield_from_disk(self):
         logger.debug("attempting to load bitfield from disk")
         """
-        Loads bitfield from disk (if it exists) to restart where previous download left off.
+        Loads bitfield from disk (if it exists) to restart where previous download left off. If already done it will set downloaded pieces to complete
         """
         try:
             if os.path.isfile(self.bitfield_path):  # already there
                 with open(self.bitfield_path, "r+") as file1:
                     bitfield = [int(char) for char in file1.read().strip()]
+                    # set pieces that are comlpete to complete and downloaded
+                    for index, bit in enumerate(bitfield): 
+                        if bit == 1: 
+                            self.pieces[index].set_complete_from_prev_download()
                     return bitfield
             else:  # doesn't exist yet
                 bitfield = [0] * len(self.pieces)
@@ -103,11 +107,11 @@ class File:
 
     def total_downloaded_percentage(self):
         """Get total download percent for verified data"""
-        return (self.bytes_downloaded_unverified / self.length) * 100
+        return (self.bytes_downloaded_unverified() / self.length) * 100
 
     def total_downloaded_unverified_percentage(self):
         """Get total download percent for unverified data"""
-        return (self.bytes_downloaded_unverified / self.length) * 100
+        return (self.bytes_downloaded_unverified() / self.length) * 100
 
     def missing_pieces(self):
         """Returns a list of pieces that have not yet been fully downloaded and/or verified."""

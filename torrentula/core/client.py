@@ -228,8 +228,11 @@ class Client:
     def receive_messages(self):
         sockets_and_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
         ready_peers, _, _ = select.select(sockets_and_peers.keys(), [], [], 0)
-        for socket in ready_peers:
-            sockets_and_peers[socket].receive_messages()
+        for socket in ready_peers: 
+            tp = sockets_and_peers[socket].target_piece #gets the piece using the target piece index and passes it in to recv mssg 
+            if tp != None: 
+                tp = self.file.pieces[tp]
+            sockets_and_peers[socket].receive_messages(tp)
         check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.is_connected]
         for peer in check_liveness:
             peer.disconnect_if_timeout()
