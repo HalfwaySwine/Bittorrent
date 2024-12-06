@@ -18,4 +18,5 @@
 *__pycache__
 *.log
 *.part
+*.iso
 *.bitfield
