@@ -25,10 +25,10 @@ class File:
 
     def initialize_file(self):
         if os.path.exists(self.torrent_path):
-            self.file = open(self.torrent_path, "wb+")
+            self.file = open(self.torrent_path, "rb+") #opens without overwriting 
             logger.debug("In-progress download file already exists.")
         else:
-            self.file = open(self.torrent_path, "wb+")
+            self.file = open(self.torrent_path, "wb+") #creates a new 
             self.file.write(b"\x00" * self.length)
             logger.debug(f"Created empty in-progress download file with size {self.length}.")
 
@@ -101,6 +101,14 @@ class File:
     # returns list of download precents per piece
     def get_download_percents(self) -> str:
         return [piece.get_download_percent() for piece in self.pieces]
+    
+    #get total download precent for unverfied data
+    def get_total_download_precent(self): 
+        total = 0 
+        for i in self.pieces: 
+            total += i.downloaded
+        total = (total/self.length) *  100
+        return total
 
     # gets downloaded amount from piece
     def get_total_downloaded(self) -> str:
@@ -173,3 +181,7 @@ class File:
     def remove_bitfield_from_disk(self):
         os.remove(self.bitfield_path)
         logger.info("Removed bitfield from disk.")
+
+    #closes file
+    def close_file(self): 
+        self.file.close()

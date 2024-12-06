@@ -131,7 +131,7 @@ class Piece:
         try:
             
             self.fileDesc.seek((self.index * self.torrentLength) + offset)
-            self.fileDesc.read(blockLength)
+            data = self.fileDesc.read(blockLength)
             logger.info("get_data_from_file retunred data")
             return data
         except Exception as e:

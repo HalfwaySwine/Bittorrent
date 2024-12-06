@@ -106,6 +106,7 @@ class Client:
         self.epoch_start_time = datetime.now()
         # Main event loop
         while not self.file.complete():
+            logger.info(f"Download precent = {self.file.get_total_download_precent()}")
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
@@ -117,10 +118,12 @@ class Client:
                 self.establish_new_epoch()
         # Clean up resources
         self.cleanup()
+        
         if self.file.complete():  # If file is complete, rename file to real name and delete bitfield.
             path = Path(self.destination)
             self.file.rename(path / self.filename)
             self.file.remove_bitfield_from_disk()
+            self.file.close_file() #closes file
             return True
         return False
 
