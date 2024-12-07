@@ -85,7 +85,7 @@ class Tracker:
         self.sock.connect((host, port))
         request = f"GET /scrape?info_hash={quote_plus(self.info_hash)} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
         self.sock.sendall(request.encode())
-        print(request)
+        logger.debug(request)
         # Receive response
         response = b""
         while True:
@@ -93,7 +93,7 @@ class Tracker:
             if not data:
                 break
             response += data
-        print(response)
+        logger.debug(response)
         #status_code = int(response.decode().split('\r\n')[0].split()[1])
         header, body = response.split(b"\r\n\r\n", 1)
         # if status_code >= 400:

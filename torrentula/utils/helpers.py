@@ -7,16 +7,28 @@ from ..config import LOG_FILENAME, LOG_DIRECTORY
 logger = logging.getLogger(LOG_FILENAME)
 
 from enum import Enum
+
+
 class Status(Enum):
     SUCCESS = "Success"
     FAILURE = "Failure"
     IN_PROGRESS = "In Progress"
 
-def configure_logging():
+
+def configure_logging(args):
     """
     Configures global logger variable for convenient logging to file.
     """
-    logger.setLevel(logging.DEBUG)
+    if args.debug:
+        logger.info("Logging set to debug level.")
+        logger.setLevel(logging.DEBUG)
+    elif args.info:
+        logger.info("Logging set to info level.")
+        logger.setLevel(logging.INFO)
+    else:  # Default
+        logger.info("Logging set to default level.")
+        logger.setLevel(logging.WARNING)
+
     if not os.path.exists(LOG_DIRECTORY):
         os.makedirs(LOG_DIRECTORY)
     if not logger.handlers:
@@ -46,6 +58,22 @@ def parse_arguments():
         type=str,
         default=".",
         help="The relative path of the destination directory where the downloaded file will be saved (default: current directory).",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
+    )
+    log_group = parser.add_mutually_exclusive_group()  # User can select one level: debug, info, or none (default).
+    log_group.add_argument(
+        "--debug",
+        action="store_true",
+        help="Set logger to debug level (most verbose).",
+    )
+    log_group.add_argument(
+        "--info",
+        action="store_true",
+        help="Set logger to info level.",
     )
     args = parser.parse_args()
     logging.info(f"Parsed arguments: torr={args.torr}, dest={args.dest}")

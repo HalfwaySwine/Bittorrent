@@ -10,7 +10,9 @@ from ..config import (
 from .tracker import Tracker
 from .strategy import Strategy
 from .file import File
+from .piece import Piece
 import bencoder
+import traceback
 import os
 import sys
 import signal
@@ -55,14 +57,13 @@ class Client:
             print(f"Error: Could not decode torrent file '{torrent_file}'!")
             print(e)
             sys.exit(1)
-
         # Extracts announce url from the torrent file and sets up the Tracker class.
         announce_url = torrent_data[b"announce"].decode()
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
         self.tracker = Tracker(announce_url, self.peer_id, self.info_hash, len(hashes))
         # Extracts file metadata from torrent file and sets up the File class.
-        self.filename = torrent_data[b"info"][b"name"].decode("utf-8")
+        self.filename: str = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
         piece_length = int(torrent_data[b"info"][b"piece length"])
         assert len(hashes) * piece_length == self.length, "Error: Torrent length, piece length and hashes do not match!"
@@ -110,6 +111,8 @@ class Client:
             self.accept_peers()
             self.receive_messages()
             completed_pieces = self.file.update_bitfield()
+            if completed_pieces:
+                self.repaint_progress()
             self.send_haves(completed_pieces)
             self.send_requests()
             self.send_keepalives()
@@ -161,7 +164,7 @@ class Client:
             self.peers.append(new_peer)
             connected_peers += 1
             logger.info(f"Connection established with peer: {addr}")
-            rdy, _, _ = select.select([self.sock], [], [], timeout) # Poll again to check for more peers
+            rdy, _, _ = select.select([self.sock], [], [], timeout)  # Poll again to check for more peers
 
     def close_socket(self):
         if self.sock:
@@ -178,7 +181,9 @@ class Client:
                 logger.debug(f"Attempting to connect to {len(not_connected)} additional peers...")
                 for peer in not_connected:
                     if peer.connect() == Status.SUCCESS:
-                        assert False, "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
+                        assert (
+                            False
+                        ), "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
 
             # self.tracker.request_peers(): TODO
 
@@ -210,9 +215,8 @@ class Client:
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
         available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
         for peer in available_peers:
-            # add new check if piece is complete before doing anything, 
-            # reset target_piece if completed already
-            target_piece_object = self.file.pieces[peer.target_piece]
+            # Reset target_piece if completed already.
+            target_piece_object: Piece = self.file.pieces[peer.target_piece]
             if target_piece_object.complete:
                 peer.target_piece = None
             else:
@@ -232,13 +236,15 @@ class Client:
                         break
 
     def receive_messages(self):
-        sockets_and_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
-        ready_peers, _, _ = select.select(sockets_and_peers.keys(), [], [], 0)
-        for socket in ready_peers: 
-            tp = sockets_and_peers[socket].target_piece # gets the piece using the target piece index and passes it in to recv msg 
-            if tp != None: 
-                tp = self.file.pieces[tp]
-            sockets_and_peers[socket].receive_messages(tp)
+        sockets_to_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
+        ready_peers, _, _ = select.select(sockets_to_peers.keys(), [], [], 0)
+        for socket in ready_peers:
+            target_piece_index = sockets_to_peers[socket].target_piece
+            if target_piece_index != None:
+                target_piece = self.file.pieces[target_piece_index]
+                sockets_to_peers[socket].receive_messages(target_piece)
+            else:
+                sockets_to_peers[socket].receive_messages(None)
         check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.is_connected]
         for peer in check_liveness:
             peer.disconnect_if_timeout()
@@ -250,6 +256,17 @@ class Client:
         print("=== Peers ===")
         for index, peer in enumerate(self.peers):
             print(index, ": ", peer)
+
+    def repaint_progress(self):
+        # - Download Speed: TBD
+        connected_peers: int = len(peer for peer in self.peers if peer.is_connected)
+        output = f"""
+        {self.filename}
+        - Peers: {len(self.peers)} ({connected_peers} connected)
+        - Completed: {self.file.get_progress()}
+        """
+        sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
+        sys.stdout.flush()  # Ensure the output is written immediately
 
     def __str__(self):
         """
@@ -274,13 +291,19 @@ class Client:
     def shutdown(self, signum=None, frame=None):
         """
         Saves bitmap of pieces to disk and frees client resources.
-        Runs during normal termination and also upon early termination as a handler for SIGINT and SIGTERM.
+        Runs upon early termination as a handler for SIGINT and SIGTERM.
         """
+        traceback.print_stack()
+        print("Received SIGINT or SIGTERM. Cleaning up resource and shutting down...")
         self.cleanup()
         self.file.write_bitfield_to_disk()
         sys.exit(1)
 
     def cleanup(self):
+        """
+        Saves bitmap of pieces to disk and frees client resources.
+        Invoked for both normal and early (interrupted) termination.
+        """
         self.file.close_file()
         self.tracker.disconnect()
         self.close_socket()

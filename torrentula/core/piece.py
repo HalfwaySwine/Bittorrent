@@ -1,6 +1,7 @@
 import hashlib
 from .block import Block
 import time
+from io import BufferedRandom
 from ..utils.helpers import logger, Status
 
 BLOCK_SIZE = 16 * 1024  # standard block size we will request 16kb
@@ -34,7 +35,7 @@ Interface
 
 
 class Piece:
-    def __init__(self, index, length, hash, torrentLength, torrentPath, fileDesc):
+    def __init__(self, index, length, hash, torrentLength, torrentPath, fileDesc: BufferedRandom):
         self.index = index  # index of piece
         self.length = length  # length of entire piece (will be different for last piece)
         self.default_piece_length = length # default piece length for index calculation, we only change self.length after the constructor
@@ -47,13 +48,13 @@ class Piece:
         self.pendingRequests = {}  # key = offset value = timestamp keeps track of the offsets we have asked for
         self.torrentLength = torrentLength  # length listed in torrent file
         self.torrentPath = torrentPath
-        self.fileDesc = fileDesc #file to write to
+        self.fileDesc = fileDesc  # file to write to
 
     # gets the next offset and length to ask the peer for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
     def get_next_request(self):
         logger.debug("attempting to get next request")
-        if self.complete: 
+        if self.complete:
             logger.info("status of Get_next_request(): already complete")
             return (None, None)
         if self.length < BLOCK_SIZE:  # if last piece is smaller than the block size
@@ -130,8 +131,8 @@ class Piece:
     def get_data_from_file(self, offset, blockLength):
         logger.debug("Attempting get_data_from_file()")
         try:
-            
-            self.fileDesc.seek((self.index * self.torrentLength) + offset)
+
+            self.fileDesc.seek((self.index * self.default_piece_length) + offset)
             data = self.fileDesc.read(blockLength)
             logger.info("get_data_from_file retunred data")
             return data
@@ -139,11 +140,11 @@ class Piece:
             print("Error reading from disk: " + str(e))
             logger.debug("Error reading from disk")
 
-    def set_complete_from_prev_download(self): 
+    def set_complete_from_prev_download(self):
         """
         sets a piece to complete. This may be used to set a piece to complete based on a previous download
         """
-        self.downloaded = self.length 
+        self.downloaded = self.length
         self.complete = True
 
     # forms complete buffer with data in block datastructure (helper fucntion)
@@ -162,7 +163,7 @@ class Piece:
     def _write_to_disk(self):
         logger.debug("Attempting write_to_disk")
         try:
-            
+
             self.fileDesc.seek(self.index * self.default_piece_length)
             self.fileDesc.write(self.pieceBuffer)
         except Exception as e:

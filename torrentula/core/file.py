@@ -51,18 +51,23 @@ class File:
     def load_bitfield_from_disk(self):
         logger.debug("attempting to load bitfield from disk")
         """
-        Loads bitfield from disk (if it exists) to restart where previous download left off. If already done it will set downloaded pieces to complete
+        Loads bitfield from disk (if it exists) to restart where previous download left off.
+        Marks already completed pieces as complete.
         """
         try:
-            if os.path.isfile(self.bitfield_path):  # already there
+            # Check if bitfield and partially downloaded file already exists.
+            if os.path.isfile(self.bitfield_path) and os.path.isfile(self.torrent_path):
                 with open(self.bitfield_path, "r+") as file1:
                     bitfield = [int(char) for char in file1.read().strip()]
-                    # set pieces that are comlpete to complete and downloaded
-                    for index, bit in enumerate(bitfield): 
-                        if bit == 1: 
+                    # Use the stored bitfield data to mark the appropriate pieces as already completed.
+                    for index, bit in enumerate(bitfield):
+                        if bit == 1:
                             self.pieces[index].set_complete_from_prev_download()
+                    logger.info(f"Successfully reloaded progress from bitfield on disk: {bitfield}")
+                    logger.info(f"Previous progress:")
+                    logger.info(self)
                     return bitfield
-            else:  # doesn't exist yet
+            else:  # Bitfield does not exist
                 bitfield = [0] * len(self.pieces)
                 with open(self.bitfield_path, "w") as file1:
                     file1.write("".join(map(str, bitfield)))
@@ -89,13 +94,16 @@ class File:
             self.write_bitfield_to_disk()
             logger.debug("Bitfield updated!")
             logger.info(
-                f"{self.total_downloaded_percentage()}% downloaded (verified), {self.total_downloaded_unverified_percentage()}% downloaded (unverified)"
+                f"{self.total_downloaded_percentage():.2f}% downloaded (verified), {self.total_downloaded_unverified_percentage():.2f}% downloaded (unverified)"
             )
         return newly_completed
 
+    def get_progress(self):
+        return f"{self.total_downloaded_percentage():.2f}% ({self.bytes_downloaded // 1000}MB of {self.length // 1000} MB)"
+
     def __str__(self):
         print("===Overall===")
-        print(f"Progress: {self.bytes_downloaded()} / {self.length}")
+        print(f"Progress: {self.bytes_downloaded()} / {self.length} ({self.total_downloaded_percentage:.2f}%)")
 
         print("===Pieces===")
         for index, piece in enumerate(self.pieces):
@@ -140,7 +148,6 @@ class File:
         logger.debug("Calculating bytes left...")
         total = 0
         for piece_index in self.missing_pieces():
-            print(total)
             total += self.pieces[piece_index].length
         logger.debug(f"{total} bytes left")
         return total
@@ -173,7 +180,6 @@ class File:
 
     def rename(self, new):
         """Renames the file. Used when the download is complete to remove the temporary suffix."""
-        # changed to use torrent path, which includes the suffix
         old = self.torrent_path
         os.rename(old, new)
         logger.info(f"Renamed file from '{old}' to '{new}'.")
@@ -183,4 +189,5 @@ class File:
         logger.info("Removed bitfield from disk.")
 
     def close_file(self):
-        self.file.close()
+        if self.file:
+            self.file.close()
