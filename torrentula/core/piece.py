@@ -55,14 +55,14 @@ class Piece:
     def get_next_request(self):
         logger.debug("attempting to get next request")
         if self.complete:
-            logger.info("status of Get_next_request(): already complete")
+            logger.debug("status of Get_next_request(): already complete")
             return (None, None)
         if self.length < BLOCK_SIZE:  # if last piece is smaller than the block size
             if 0 not in self.blocks:
                 self.pendingRequests[0] = time.time()
-                logger.info(f"status of Get_next_request(): 0 {self.length} Last piece is smaller than block")
+                logger.debug(f"status of Get_next_request(): 0 {self.length} Last piece is smaller than block")
                 return (0, self.length)
-            logger.info("status of Get_next_request(): None None Last piece is smaller than block")
+            logger.debug("status of Get_next_request(): None None Last piece is smaller than block")
             return (None, None)
 
         for offset in range(0, self.length, BLOCK_SIZE):
@@ -74,9 +74,9 @@ class Piece:
                         lengthToRetun = lastLength
                     # add to pending requests or update time
                     self.pendingRequests[offset] = time.time()
-                    logger.info(f"status of Get_next_request(): {offset} {lengthToRetun}")
+                    logger.debug(f"status of Get_next_request(): {offset} {lengthToRetun}")
                     return (offset, lengthToRetun)
-        logger.info("status of Get_next_request(): None None")
+        logger.debug("status of Get_next_request(): None None")
         return (None, None)
 
     # checks if its been to long since it requested this block if so needs to re request it (helper fucntion)
@@ -114,13 +114,13 @@ class Piece:
                 self.pieceBuffer = None
                 self.downloaded = 0
                 self.complete = False
-                logger.info("Download done invalid hash")
+                logger.debug("Download done invalid hash")
                 logger.debug("Download done invalid hash")
                 return -1
             self._write_to_disk()
-            logger.info("Download Sone and Valid")
+            logger.debug("Download Sone and Valid")
             return 0
-        logger.info("Download not done")
+        logger.debug("Download not done")
         return 1
 
     # Returns the percent of how close it is to downloading out of 100
@@ -134,7 +134,7 @@ class Piece:
 
             self.fileDesc.seek((self.index * self.default_piece_length) + offset)
             data = self.fileDesc.read(blockLength)
-            logger.info("get_data_from_file retunred data")
+            logger.debug("get_data_from_file retunred data")
             return data
         except Exception as e:
             print("Error reading from disk: " + str(e))
