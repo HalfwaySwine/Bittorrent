@@ -259,12 +259,11 @@ class Client:
 
     def repaint_progress(self):
         # - Download Speed: TBD
-        connected_peers: int = len(peer for peer in self.peers if peer.is_connected)
-        output = f"""
-        {self.filename}
-        - Peers: {len(self.peers)} ({connected_peers} connected)
-        - Completed: {self.file.get_progress()}
-        """
+        connected_peers: int = len([peer for peer in self.peers if peer.is_connected])
+        output  = f"File: {self.filename} | "
+        output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
+        output += f"Completed: {self.file.get_progress()}"
+        sys.stdout.write("\033[2K\r")  # Clear the line
         sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
         sys.stdout.flush()  # Ensure the output is written immediately
 
