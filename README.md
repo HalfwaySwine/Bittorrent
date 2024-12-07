@@ -4,7 +4,16 @@
 
 The **BitTorrent client** can be used in two ways: as a command-line script or imported as a package into other Python code.
 
+#### Requirements
+Install the following prerequisities and if needed use a virtual environment.
+```bash
+# python3 -m venv venv
+# source venv/bin/activate
+pip3 install bencoder.pyx
+```
+
 #### Quick Start
+To download a sample torrent, run the following.
 ```python
 python -m torrentula --torr tests/fixtures/debian-mac.torrent
 ```
