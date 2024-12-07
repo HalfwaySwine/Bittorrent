@@ -66,7 +66,10 @@ class Client:
         self.filename: str = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
         piece_length = int(torrent_data[b"info"][b"piece length"])
-        assert len(hashes) * piece_length == self.length, "Error: Torrent length, piece length and hashes do not match!"
+        #last piece can be smaller
+        last_piece_size = self.length - (piece_length * (len(hashes) - 1))
+        calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size 
+        assert calc_size_total == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
 
     @classmethod
@@ -213,7 +216,7 @@ class Client:
 
     def send_requests(self):
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
-        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested]
+        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece]
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]

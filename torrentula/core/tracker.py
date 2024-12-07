@@ -5,6 +5,7 @@ import bencoder
 from .peer import Peer
 from ..config import HTTP_PORT
 import sys
+from struct import unpack
 
 class Tracker:
     """
@@ -30,11 +31,21 @@ class Tracker:
         # Seconds that the client should wait between sending regular requests to the tracker
         self.interval = decoded[b"interval"]
         peer_list = []
-        for peer in decoded[b"peers"]:
-            ip = peer[b"ip"].decode("utf-8")
-            port = peer[b"port"]
-            peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
-            logger.debug(f"Peer: {ip}:{port}")
+
+        peers = decoded[b"peers"]
+
+        if isinstance(peers, bytes): #compact form
+            for i in range(0, len(peers), 6):
+                peer_data = peers[i:i + 6]
+                ip = ".".join(map(str, peer_data[:4]))  
+                port = unpack(">H", peer_data[4:])[0]  
+                peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
+        else: #non compact form
+            for peer in decoded[b"peers"]:
+                ip = peer[b"ip"].decode("utf-8")
+                port = peer[b"port"]
+                peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
+                logger.debug(f"Peer: {ip}:{port}")
         return peer_list
 
     def send_tracker_request(self, port, uploaded, downloaded, left, event):
@@ -65,8 +76,10 @@ class Tracker:
                 break
             response += data
 
-        status_code = int(response.decode().split('\r\n')[0].split()[1])
         headers, body = response.split(b"\r\n\r\n", 1)
+        headers_text = headers.decode(errors="replace")
+        status_code = int(headers_text.split("\r\n")[0].split()[1])
+
         if status_code >= 400:
             # TODO: Handle bad/invalid http responses
             logger.critical(f"{headers}")
