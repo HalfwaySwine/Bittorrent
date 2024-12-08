@@ -17,30 +17,33 @@ BLOCK_SIZE = 16 * 1024  # 16 KB block size
 HASH = hashlib.sha1((b"test_piece_data" * ((PIECE_LENGTH // len("test_piece_data")) + 1))[:PIECE_LENGTH]).digest()
 TORRENT_PATH = "test_piece.torrent"  # Test file path
 ADD_PATH = "thisistest.part"
-piece = Piece(0, PIECE_LENGTH, HASH, PIECE_LENGTH, ADD_PATH)
+piece = Piece(0, PIECE_LENGTH, HASH, PIECE_LENGTH, ADD_PATH, 0)
 
 
-configure_logging()
+# configure_logging("")
 # apparently this guy is a seeder that's always running or smth
-peer = Peer("72.235.13.154", 6881, b"\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9", "12345678901234567890", 2516)
+# peer = Peer("72.235.13.154", 6881, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
+peer = Peer("188.242.229.57", 11096, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
 peer.target_piece = piece
 peer.connect()
-
+print(peer.socket)
 while True:
     _, rdy, _ = select.select([], [peer.socket], [], 0)
     if rdy:
-        peer.tcp_established = True
+        error = rdy[0].getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+        print(error)
+        peer.is_connected = True
         break
 peer.send_handshake()
 print("can send bitfield: ", peer.can_send_bitfield)
 _, _, _ = select.select([peer.socket], [], [], 5)
-peer.receive_messages()
+peer.receive_messages(piece)
 print(peer.received_handshake)
 print("can send bitfield: ", peer.can_send_bitfield)
 # send a bitfield of all 0s
 peer.send_bitfield(bytes(315))
 _, _, _ = select.select([peer.socket], [], [], 1)
-peer.receive_messages()
+peer.receive_messages(piece)
 print(peer.received_handshake)
 print("can send bitfield: ", peer.can_send_bitfield)
 peer.send_interested()
@@ -56,7 +59,7 @@ while True:
     rdy, _, _ = select.select([peer.socket], [], [], 0)
 
     if rdy:
-        peer.receive_messages()
+        peer.receive_messages(piece)
     if peer.peer_choking == False and i < 4:
         offset, length = piece.get_next_request()
         peer.send_request(piece, offset, length)
