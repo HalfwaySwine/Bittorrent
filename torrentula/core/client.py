@@ -25,6 +25,7 @@ import hashlib
 from urllib.parse import quote_plus
 from pathlib import Path
 from .peer import Peer
+import errno
 
 
 class Client:

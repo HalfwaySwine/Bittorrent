@@ -64,8 +64,6 @@ class File:
                         if bit == 1:
                             self.pieces[index].set_complete_from_prev_download()
                     logger.info(f"Successfully reloaded progress from bitfield on disk: {bitfield}")
-                    logger.info(f"Previous progress:")
-                    logger.info(self)
                     return bitfield
             else:  # Bitfield does not exist
                 bitfield = [0] * len(self.pieces)
