@@ -203,7 +203,8 @@ class Client:
             peer = pending_peers[sock]
             error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
-                raise OSError(f"Connection failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+                logger.info(f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+                peer.disconnect()
             peer.is_connected = True
             logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
             peer.send_handshake()

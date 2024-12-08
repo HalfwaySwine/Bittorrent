@@ -31,16 +31,17 @@ class Tracker:
         # Seconds that the client should wait between sending regular requests to the tracker
         self.interval = decoded[b"interval"]
         peer_list = []
-
         peers = decoded[b"peers"]
 
         if isinstance(peers, bytes): #compact form
+            logger.info("Tracker sent peers in compact format.")
             for i in range(0, len(peers), 6):
                 peer_data = peers[i:i + 6]
                 ip = ".".join(map(str, peer_data[:4]))  
                 port = unpack(">H", peer_data[4:])[0]  
                 peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
         else: #non compact form
+            logger.info("Tracker sent peers in normal (not compact) format.")
             for peer in decoded[b"peers"]:
                 ip = peer[b"ip"].decode("utf-8")
                 port = peer[b"port"]

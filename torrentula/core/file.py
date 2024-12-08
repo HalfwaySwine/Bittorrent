@@ -97,7 +97,7 @@ class File:
         return newly_completed
 
     def get_progress(self):
-        return f"{self.total_downloaded_percentage():.2f}% ({self.bytes_downloaded() // 1_000_000} MB of {self.length // 1_000_000} MB)"
+        return f"{self.total_downloaded_percentage():.2f}% ({self.bytes_downloaded() / 1_000_000:.2f} MB of {self.length / 1_000_000:.2f} MB)"
 
     def __str__(self):
         print("===Overall===")
