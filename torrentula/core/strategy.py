@@ -9,8 +9,9 @@ class Strategy:
         """
         Given a list of peers, return a list of peers to unchoke.
         """
-        top_four = Strategy.get_top_four(peers)
-        not_top_four = [peer for peer in peers if peer not in top_four]
+        connected = [peer for peer in peers if peer.is_connected]
+        top_four = Strategy.get_top_four(connected)
+        not_top_four = [peer for peer in connected if peer not in top_four]
         optimistic_unchoke = [Strategy.get_optimistic_unchoke(not_top_four)] if not_top_four else []
         return top_four + optimistic_unchoke
 

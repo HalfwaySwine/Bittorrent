@@ -35,7 +35,7 @@ class Peer:
     Represents a peer Bittorrent client in the same swarm.
     """
 
-    def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, v4=True):
+    def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, sock=None, v4=True):
         """
         Socket argument is provided when the client accepted this connection from a peer rather than initiaiting it.
         bitfield_length is the number of pieces in the torrent
@@ -47,7 +47,6 @@ class Peer:
         else:
             self.addr = (ip_address, port, 0, 0)
 
-        self.socket = None  # Value is None when this peer is disconnected.
         self.bitfield_length = bitfield_length
         self.bitfield = [0] * self.bitfield_length  # Initialized to all 0 for the length of the torrent
 
@@ -73,6 +72,11 @@ class Peer:
         self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
         self.can_send_bitfield = False  # client checks and handles sending bitfields
         self.is_connected = False  # self explanatory, if we have a socket and this is false, connection is ongoing
+        self.socket = sock  # Value is None when this peer is disconnected.
+        # if we pass in a socket we are already connected, send handshake
+        if sock is not None:
+            self.is_connected = True
+            self.send_handshake()
 
     def connect(self):
         """
@@ -131,8 +135,10 @@ class Peer:
         msg = struct.pack(
             f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode("utf-8"), self.info_hash, self.peer_id.encode("utf-8")
         )
-        self.sent_handshake = True
-        return self.send_msg(msg)
+        res = self.send_msg(msg)
+        if res == Status.SUCCESS:
+            self.sent_handshake = True
+        return res
 
     # was handled in receive_messages
     # def download(self, block):
@@ -332,6 +338,7 @@ class Peer:
         # fail if not connected
         if not self.is_connected:
             return Status.FAILURE
+        assert self.socket  # TODO Remove after debugging
         # once we send any other message we can't send a bitfield anymore
         self.can_send_bitfield = False
         logger.debug(f"sending to {self.addr}:")
@@ -339,7 +346,7 @@ class Peer:
         self.last_sent = datetime.now()
         try:
             self.socket.sendall(msg)
-        except Exception as _:
+        except Exception as e:
             logger.debug("message failed to send, disconnecting")
             self.disconnect()
             return Status.FAILURE

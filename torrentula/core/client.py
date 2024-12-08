@@ -66,8 +66,9 @@ class Client:
         self.filename: str = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
         piece_length = int(torrent_data[b"info"][b"piece length"])
-        #last piece can be smaller
-        last_piece_size = self.length - (piece_length * (len(hashes) - 1))
+        # Verify integrity of torrent file size, hashes, and pieces.
+        last_piece_size = self.length - (piece_length * (len(hashes) - 1)) # Last piece can be smaller.
+        assert last_piece_size <= piece_length, "Error: Last piece is larger than piece size."
         calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size 
         assert calc_size_total == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
@@ -108,6 +109,7 @@ class Client:
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
+        self.repaint_progress()
         # Main event loop
         while not self.file.complete():
             self.add_peers()
@@ -198,6 +200,9 @@ class Client:
         _, writable, _ = select.select([], pending_peers.keys(), [], 0)
         for sock in writable:
             peer = pending_peers[sock]
+            error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            if error != 0:
+                raise OSError(f"Connection failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
             peer.is_connected = True
             logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
             peer.send_handshake()
