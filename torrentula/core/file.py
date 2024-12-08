@@ -173,7 +173,7 @@ class File:
         total = 0
         for piece in self.pieces:
             total += piece.downloaded
-        logger.debug("{total} bytes downloaded (based on unverified data)")
+        logger.debug(f"{total} bytes downloaded (based on unverified data)")
         return total
 
     def rename(self, new):

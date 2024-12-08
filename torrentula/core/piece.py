@@ -114,11 +114,10 @@ class Piece:
                 self.pieceBuffer = None
                 self.downloaded = 0
                 self.complete = False
-                logger.debug("Download done invalid hash")
-                logger.debug("Download done invalid hash")
+                logger.debug("Download done but invalid hash")
                 return -1
             self._write_to_disk()
-            logger.debug("Download Sone and Valid")
+            logger.debug("Download done and valid")
             return 0
         logger.debug("Download not done")
         return 1

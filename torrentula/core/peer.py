@@ -137,7 +137,10 @@ class Peer:
         )
         res = self.send_msg(msg)
         if res == Status.SUCCESS:
+            logger.info(f"Handshake succeeded to peer at {self.addr}")
             self.sent_handshake = True
+        else:
+            logger.info(f"Handshake failed to peer at {self.addr}")
         return res
 
     # was handled in receive_messages
@@ -338,7 +341,8 @@ class Peer:
         # fail if not connected
         if not self.is_connected:
             return Status.FAILURE
-        assert self.socket  # TODO Remove after debugging
+        if not self.socket:
+            logger.error("Peer's send_msg was called without having a socket.")
         # once we send any other message we can't send a bitfield anymore
         self.can_send_bitfield = False
         logger.debug(f"sending to {self.addr}:")

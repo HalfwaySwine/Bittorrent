@@ -205,9 +205,10 @@ class Client:
             if error != 0:
                 logger.info(f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
                 peer.disconnect()
-            peer.is_connected = True
-            logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
-            peer.send_handshake()
+                continue
+            if peer.send_handshake() == Status.SUCCESS:
+                logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
+                peer.is_connected = True
 
     def send_haves(self, completed_pieces):
         """

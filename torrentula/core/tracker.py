@@ -62,12 +62,15 @@ class Tracker:
         parsed_url = urlparse(self.url)
         host = parsed_url.hostname
         port = parsed_url.port
-        self.sock.connect((host, port))
+        path = parsed_url.path
+        tracker_addr = (host, port)
+        logger.debug(f"Attempting to connect to tracker at {host}:{port} over TCP...")
+        self.sock.connect(tracker_addr)
 
          # Construct get request
         encoded_params = urlencode(params)
         # Construct the HTTP GET request
-        request = f"GET /announce?info_hash={quote_plus(self.info_hash)}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        request = f"GET {path}?info_hash={quote_plus(self.info_hash)}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
         self.sock.sendall(request.encode())
         # Receive response
         response = b""
@@ -76,7 +79,7 @@ class Tracker:
             if not data:
                 break
             response += data
-
+        assert response
         headers, body = response.split(b"\r\n\r\n", 1)
         headers_text = headers.decode(errors="replace")
         status_code = int(headers_text.split("\r\n")[0].split()[1])
