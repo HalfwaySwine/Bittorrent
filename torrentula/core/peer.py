@@ -59,6 +59,7 @@ class Peer:
         # Track statistics *per epoch* to inform strategic decision-making.
         self.bytes_received = 0
         self.bytes_sent = 0
+        self.connection_attempts = 0
 
         self.outgoing_requests = []  # List of pieces that we have requested from the peer but have not completed.
         self.incoming_requests = []  # list of incoming requests
@@ -75,8 +76,13 @@ class Peer:
         self.socket = sock  # Value is None when this peer is disconnected.
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
-            self.is_connected = True
+            self.connection_success()
             self.send_handshake()
+
+    def connection_success(self):
+        self.is_connected = True
+        self.connection_attempts = 0
+        logger.debug(f"Successfully connected to peer at {self.addr}...")
 
     def connect(self):
         """
@@ -86,6 +92,7 @@ class Peer:
         self.socket.setblocking(False)
         try:
             logger.debug(f"Attempting to connect to peer at {self.addr}...")
+            self.connection_attempts += 1
             self.last_sent = datetime.now()
             self.last_received = datetime.now()
             self.socket.connect(self.addr)
@@ -97,8 +104,7 @@ class Peer:
             self.socket.close()
             self.socket = None
             return Status.FAILURE
-        self.is_connected = True
-        logger.debug(f"Successfully connected to peer at {self.addr}...")
+        self.connection_success()
         return Status.SUCCESS
 
     def disconnect(self):

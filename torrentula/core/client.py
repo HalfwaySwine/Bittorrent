@@ -6,6 +6,7 @@ from ..config import (
     MAX_CONNECTED_PEERS,
     IN_PROGRESS_FILENAME_SUFFIX,
     BITTORRENT_PORT,
+    MAX_CONNECTION_ATTEMPTS,
 )
 from .tracker import Tracker
 from .strategy import Strategy
@@ -68,9 +69,9 @@ class Client:
         self.length = int(torrent_data[b"info"][b"length"])
         piece_length = int(torrent_data[b"info"][b"piece length"])
         # Verify integrity of torrent file size, hashes, and pieces.
-        last_piece_size = self.length - (piece_length * (len(hashes) - 1)) # Last piece can be smaller.
+        last_piece_size = self.length - (piece_length * (len(hashes) - 1))  # Last piece can be smaller.
         assert last_piece_size <= piece_length, "Error: Last piece is larger than piece size."
-        calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size 
+        calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size
         assert calc_size_total == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
 
@@ -116,6 +117,7 @@ class Client:
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
+            self.cleanup_peers()
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
                 self.repaint_progress()
@@ -203,12 +205,14 @@ class Client:
             peer = pending_peers[sock]
             error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
-                logger.info(f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+                logger.info(
+                    f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}"
+                )
                 peer.disconnect()
                 continue
             if peer.send_handshake() == Status.SUCCESS:
                 logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
-                peer.is_connected = True
+                peer.connection_success()
 
     def send_haves(self, completed_pieces):
         """
@@ -224,7 +228,9 @@ class Client:
 
     def send_requests(self):
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
-        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece]
+        available_peers = [
+            peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece
+        ]
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]
@@ -256,9 +262,19 @@ class Client:
                 sockets_to_peers[socket].receive_messages(target_piece)
             else:
                 sockets_to_peers[socket].receive_messages(None)
-        check_liveness = [peer for peer in self.peers if peer not in ready_peers and peer.is_connected]
+
+    def cleanup_peers(self):
+        check_liveness = [peer for peer in self.peers if peer.is_connected]
         for peer in check_liveness:
+            # Disconnects but does not remove peer from peers list.
             peer.disconnect_if_timeout()
+        unreliable = [peer for peer in self.peers if peer.connection_attempts > MAX_CONNECTION_ATTEMPTS]
+        for peer in unreliable:
+            peer.disconnect()
+            logger.error(
+                f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts."
+            )
+            self.peers.remove(peer)
 
     def display_peers(self):
         """
@@ -271,7 +287,7 @@ class Client:
     def repaint_progress(self):
         # - Download Speed: TBD
         connected_peers: int = len([peer for peer in self.peers if peer.is_connected])
-        output  = f"File: {self.filename} | "
+        output = f"File: {self.filename} | "
         output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
         output += f"Completed: {self.file.get_progress()}"
         sys.stdout.write("\033[2K\r")  # Clear the line
