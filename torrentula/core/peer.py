@@ -78,6 +78,7 @@ class Peer:
         self.can_send_bitfield = False  # client checks and handles sending bitfields
         self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = sock  # Value is None when this peer is disconnected.
+        self.disconnect_count = 0
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
             self.record_tcp_established()
@@ -134,6 +135,7 @@ class Peer:
         self.bitfield = [0] * self.bitfield_length
         self.bytes_received = 0
         self.bytes_sent = 0
+        self.disconnect_count += 1
 
     def send_handshake(self):
         """
@@ -413,4 +415,4 @@ class Peer:
             socket_string = f"host_port: {self.socket.getsockname()[1]}, peer_addr: {str(self.addr[0])}:{str(self.addr[1])}"
         else:
             socket_string = "None"
-        return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}"
+        return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}, disconnect_count: {self.disconnect_count:>4}"
