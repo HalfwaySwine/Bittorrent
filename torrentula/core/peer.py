@@ -77,6 +77,7 @@ class Peer:
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
             self.connection_success()
+            # may be unnecessary since I imagine peer will send handshake and trigger in recieve_messages()
             self.send_handshake()
 
     def connection_success(self):
@@ -395,3 +396,7 @@ class Peer:
     def disconnect_if_timeout(self):
         if self.socket and datetime.now() - self.last_received > timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
             self.disconnect()
+
+    def __str__(self):
+        """Just prints connection state for now"""
+        return f'Connection attempts: {self.connection_attempts}, is_connected: {self.is_connected}, Socket: {self.socket}'
