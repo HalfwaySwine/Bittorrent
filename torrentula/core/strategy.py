@@ -9,7 +9,7 @@ class Strategy:
         """
         Given a list of peers, return a list of peers to unchoke.
         """
-        connected = [peer for peer in peers if peer.is_connected]
+        connected = [peer for peer in peers if peer.tcp_established]
         top_four = Strategy.get_top_four(connected)
         not_top_four = [peer for peer in connected if peer not in top_four]
         optimistic_unchoke = [Strategy.get_optimistic_unchoke(not_top_four)] if not_top_four else []
@@ -22,16 +22,12 @@ class Strategy:
         rarest_pieces: list[int] = Strategy.calculate_rarest_pieces(peers)
         # Remove pieces we've already downloaded.
         rarest_pieces_left: list[int] = [piece_index for piece_index in rarest_pieces if piece_index in remaining_pieces]
-        if not rarest_pieces_left: # None of the peers have pieces we need.
+        if not rarest_pieces_left:  # None of the peers have pieces we need.
             return
-        unchoked_waiting_peers = [
-            peer for peer in peers if not peer.peer_choking and peer.am_interested and peer.target_piece is None
-        ]
+        unchoked_waiting_peers = [peer for peer in peers if not peer.peer_choking and peer.am_interested and peer.target_piece is None]
         for peer in unchoked_waiting_peers:
             peer.target_piece = Strategy.choose_rarest_piece_with_randomness(rarest_pieces_left, peer)
-            assert (
-                peer.target_piece is not None
-            ), "Client should not be interested in a peer that has no desired pieces."
+            assert peer.target_piece is not None, "Client should not be interested in a peer that has no desired pieces."
 
     def send_bitfields(self, actual_bitfield, peers):
         for peer in peers:
@@ -94,8 +90,7 @@ class Strategy:
 
     @classmethod
     def determine_additional_peers(cls, file, peers: list[Peer]):
-        connected_peers = [peer for peer in peers if peer.is_connected]
-        logger.debug(f"Currently connected to {len(connected_peers)} peers")
+        connected_peers = [peer for peer in peers if peer.tcp_established]
         if len(connected_peers) < MIN_CONNECTED_PEERS:
             return MAX_CONNECTED_PEERS - len(connected_peers)
         else:

@@ -85,9 +85,7 @@ class Client:
     @classmethod
     def split_hashes(cls, bytes):
         hash_length = 20
-        assert (
-            len(bytes) % 20 == 0
-        ), f"Error: Torrent file hashes ({len(bytes)} bytes) are not a multiple of hash_length ({hash_length})!"
+        assert len(bytes) % 20 == 0, f"Error: Torrent file hashes ({len(bytes)} bytes) are not a multiple of hash_length ({hash_length})!"
         hashes = []
         for i in range(0, len(bytes), hash_length):  # Iterates [0, len - 1] in steps of 20.
             hash = bytes[i : i + hash_length]
@@ -165,7 +163,7 @@ class Client:
         timeout = 0
         assert self.sock.fileno() > 0
         rdy, _, _ = select.select([self.sock], [], [], timeout)
-        connected_peers: int = len([peer for peer in self.peers if peer.is_connected])
+        connected_peers: int = len([peer for peer in self.peers if peer.tcp_established])
         while rdy and connected_peers < MAX_CONNECTED_PEERS:  # Accept up to the maximum number of peers
             sock, addr = self.sock.accept()
             new_peer = Peer(addr[0], addr[1], self.info_hash, self.peer_id, len(self.file.bitfield), sock)
@@ -182,37 +180,31 @@ class Client:
         # Start establishment of connections to peers
         additional_peers = self.strategy.determine_additional_peers(self.file, self.peers)
         if additional_peers > 0:
-            logger.debug(f"Has space for {additional_peers} additional peers")
             # Check if we know of any peers that aren't connected
             not_connected = [peer for peer in self.peers if peer.socket is None]
             if not_connected:
-                logger.debug(f"Attempting to connect to {len(not_connected)} additional peers...")
+                logger.debug(f"Attempting to connect to {len(not_connected)} additional peers (has space for {additional_peers} additional peers)...")
                 for peer in not_connected:
                     if peer.connect() == Status.SUCCESS:
-                        assert (
-                            False
-                        ), "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
+                        assert False, "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
 
             # self.tracker.request_peers(): TODO
 
         # Check for peers that have accepted the connection
-        connections_in_progress: list[Peer] = [
-            peer for peer in self.peers if peer.socket is not None and not peer.is_connected
-        ]
+        connections_in_progress: list[Peer] = [peer for peer in self.peers if peer.socket is not None and not peer.tcp_established]
         pending_peers = {peer.socket: peer for peer in connections_in_progress}
         _, writable, _ = select.select([], pending_peers.keys(), [], 0)
         for sock in writable:
             peer = pending_peers[sock]
             error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
-                logger.info(
-                    f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}"
-                )
+                logger.info(f"Connection to peer at {peer.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
                 peer.disconnect()
                 continue
+            peer.record_tcp_established()
             if peer.send_handshake() == Status.SUCCESS:
                 logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
-                peer.connection_success()
+        print(self.display_peers())
 
     def send_haves(self, completed_pieces):
         """
@@ -228,9 +220,7 @@ class Client:
 
     def send_requests(self):
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
-        available_peers = [
-            peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece
-        ]
+        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece]
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]
@@ -246,15 +236,16 @@ class Client:
 
     def send_interested(self):
         for peer in self.peers:
-            if peer.is_connected and not peer.am_interested:
+            if peer.tcp_established and not peer.am_interested:
                 for index in self.file.missing_pieces():
                     if peer.bitfield[index] == 1:
                         peer.send_interested()
                         break
 
     def receive_messages(self):
-        sockets_to_peers = {peer.socket: peer for peer in self.peers if peer.is_connected}
+        sockets_to_peers = {peer.socket: peer for peer in self.peers if peer.tcp_established}
         ready_peers, _, _ = select.select(sockets_to_peers.keys(), [], [], 0)
+        logger.debug(f"There are {len(ready_peers)} peers with messages to receive")
         for socket in ready_peers:
             target_piece_index = sockets_to_peers[socket].target_piece
             if target_piece_index != None:
@@ -264,29 +255,28 @@ class Client:
                 sockets_to_peers[socket].receive_messages(None)
 
     def cleanup_peers(self):
-        check_liveness = [peer for peer in self.peers if peer.is_connected]
+        check_liveness = [peer for peer in self.peers if peer.tcp_established]
         for peer in check_liveness:
             # Disconnects but does not remove peer from peers list.
             peer.disconnect_if_timeout()
         unreliable = [peer for peer in self.peers if peer.connection_attempts > MAX_CONNECTION_ATTEMPTS]
         for peer in unreliable:
             peer.disconnect()
-            logger.error(
-                f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts."
-            )
+            logger.error(f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts.")
             self.peers.remove(peer)
 
     def display_peers(self):
         """
         For debugging purposes.
         """
-        print("=== Peers ===")
+        output = "=== Peers ===\n"
         for index, peer in enumerate(self.peers):
-            print(index, ": ", peer)
+            output += f"{index}: {peer}\n"
+        return output
 
     def repaint_progress(self):
         # - Download Speed: TBD
-        connected_peers: int = len([peer for peer in self.peers if peer.is_connected])
+        connected_peers: int = len([peer for peer in self.peers if peer.tcp_established])
         output = f"File: {self.filename} | "
         output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
         output += f"Completed: {self.file.get_progress()}"
@@ -304,9 +294,7 @@ class Client:
         # print(f"Peer Id: ", {self.peer_id}")
 
         # Dynamic approach
-        instance_variables = {
-            key: value for key, value in self.__dict__.items() if not callable(value) and not key.startswith("__")
-        }
+        instance_variables = {key: value for key, value in self.__dict__.items() if not callable(value) and not key.startswith("__")}
         longest_name = max(map(len, instance_variables.keys()))
         for name, value in instance_variables.items():
             print(f"{name:<{longest_name}} = {value}")

@@ -7,6 +7,7 @@ from .block import Block
 import select
 import socket
 import struct
+import errno
 
 
 class MessageType(Enum):
@@ -59,7 +60,10 @@ class Peer:
         # Track statistics *per epoch* to inform strategic decision-making.
         self.bytes_received = 0
         self.bytes_sent = 0
-        self.connection_attempts = 0
+
+        # Track statistics to inform peer reliability and connection health.
+        self.connection_attempts = 0  # Reset upon success
+        self.handshake_attempts = 0  # Never reset
 
         self.outgoing_requests = []  # List of pieces that we have requested from the peer but have not completed.
         self.incoming_requests = []  # list of incoming requests
@@ -72,16 +76,16 @@ class Peer:
         self.peer_id: str = peer_id  # we keep a peer_id here in the case of them receiving
         self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
         self.can_send_bitfield = False  # client checks and handles sending bitfields
-        self.is_connected = False  # self explanatory, if we have a socket and this is false, connection is ongoing
+        self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = sock  # Value is None when this peer is disconnected.
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
-            self.connection_success()
+            self.record_tcp_established()
             # may be unnecessary since I imagine peer will send handshake and trigger in recieve_messages()
             self.send_handshake()
 
-    def connection_success(self):
-        self.is_connected = True
+    def record_tcp_established(self):
+        self.tcp_established = True
         self.connection_attempts = 0
         logger.debug(f"Successfully connected to peer at {self.addr}...")
 
@@ -105,7 +109,7 @@ class Peer:
             self.socket.close()
             self.socket = None
             return Status.FAILURE
-        self.connection_success()
+        self.record_tcp_established()
         return Status.SUCCESS
 
     def disconnect(self):
@@ -118,7 +122,7 @@ class Peer:
         self.outgoing_requests = []  # reset list, we don't expect requests to be fulfilled
         self.incoming_requests = []
         self.socket = None
-        self.is_connected = False
+        self.tcp_established = False
         self.sent_handshake = False
         self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD
         self.sent_handshake = False
@@ -139,15 +143,14 @@ class Peer:
         pstrlen = len(pstr)
         # ! = big endian, B = unsigned char, then string s, then 8 padding 0s, then 2 20 length strings
         # I don't expect to use these 8 padding bytes
-        msg = struct.pack(
-            f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode("utf-8"), self.info_hash, self.peer_id.encode("utf-8")
-        )
+        msg = struct.pack(f"!B{pstrlen}s8x20s20s", pstrlen, pstr.encode("utf-8"), self.info_hash, self.peer_id.encode("utf-8"))
         res = self.send_msg(msg)
         if res == Status.SUCCESS:
             logger.info(f"Handshake succeeded to peer at {self.addr}")
             self.sent_handshake = True
         else:
-            logger.info(f"Handshake failed to peer at {self.addr}")
+            logger.info(f"Handshake failed to peer at {self.addr} with res={res}")
+        self.handshake_attempts += 1
         return res
 
     # was handled in receive_messages
@@ -168,15 +171,19 @@ class Peer:
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
 
             pstrlen_bytes = self.socket.recv(1)
-            if len(pstrlen_bytes) == 0:
-                logger.debug(f"connection closed, disconnecting")
+            if len(pstrlen_bytes) == 0:  # No bytes read, but caller believed socket to be readable.
+                # breakpoint()
+                error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                if error != 0:
+                    logger.info(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+                logger.error(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
                 self.disconnect()
                 return Status.FAILURE
 
             pstrlen = int.from_bytes(pstrlen_bytes)
             bytes = self.socket.recv(pstrlen + 48)
             if len(bytes) == 0:
-                logger.debug(f"connection closed, disconnecting")
+                logger.error(f"Expected {pstrlen} bytes from peer at {self.addr} and got {len(bytes)}. Disconnecting...")
                 self.disconnect()
                 return Status.FAILURE
 
@@ -190,6 +197,7 @@ class Peer:
             self.received_handshake = Handshake.CAN_RECV_BITFIELD
             # if the connection was an incoming connection we still need to send our side of the handshake
             if not self.sent_handshake:
+                self.record_tcp_established()
                 self.send_handshake()
             # when we return we expect client object to check this value and send bitfield if needed
             self.can_send_bitfield = True
@@ -346,10 +354,12 @@ class Peer:
         returns either success or failure
         """
         # fail if not connected
-        if not self.is_connected:
+        if not self.tcp_established:
+            logger.error(f"Peer at {self.addr}: send_msg was called with is_connected={self.tcp_established}")
             return Status.FAILURE
         if not self.socket:
-            logger.error("Peer's send_msg was called without having a socket.")
+            logger.error(f"Peer at {self.addr}:send_msg was called with socket={self.socket}")
+            return Status.FAILURE
         # once we send any other message we can't send a bitfield anymore
         self.can_send_bitfield = False
         logger.debug(f"sending to {self.addr}:")
@@ -384,7 +394,7 @@ class Peer:
         return self.send_msg(msg)
 
     def send_keepalive_if_needed(self):
-        if not self.is_connected or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+        if not self.tcp_established or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
             return  # Keepalive is not necessary
         else:
             self.send_keepalive()
@@ -399,4 +409,8 @@ class Peer:
 
     def __str__(self):
         """Just prints connection state for now"""
-        return f'Connection attempts: {self.connection_attempts}, is_connected: {self.is_connected}, Socket: {self.socket}'
+        if self.socket:
+            socket_string = f"host_port: {self.socket.getsockname()[1]}, peer_addr: {str(self.addr[0])}:{str(self.addr[1])}"
+        else:
+            socket_string = "None"
+        return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}"

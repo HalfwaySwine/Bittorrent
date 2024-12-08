@@ -20,31 +20,32 @@ def configure_logging(args):
     Configures global logger variable for convenient logging to file.
     """
     if args.debug:
+        logger.propagate = True  # Additionally print logs to stderr.
         logger.info("Logging set to debug level.")
         logger.setLevel(logging.DEBUG)
     elif args.info:
+        logger.propagate = True  # Additionally print logs to stderr.
         logger.info("Logging set to info level.")
         logger.setLevel(logging.INFO)
     else:  # Default
+        logger.propagate = False  # Do not print logs to stderr.
         logger.info("Logging set to default level.")
         logger.setLevel(logging.WARNING)
 
     if not os.path.exists(LOG_DIRECTORY):
         os.makedirs(LOG_DIRECTORY)
     if not logger.handlers:
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s (%(module)s.%(funcName)s:%(lineno)d)")
+
         file_handler = logging.FileHandler(os.path.join(LOG_DIRECTORY, LOG_FILENAME))
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-    # logger.propagate = False # Uncomment to have logs additionally print to stderr
     logger.info("Logger initialized.")
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="A BitTorrent client to download a .torrent file from its distributed swarm."
-    )
+    parser = argparse.ArgumentParser(description="A BitTorrent client to download a .torrent file from its distributed swarm.")
     parser.add_argument(
         "--torr",
         "-t",
