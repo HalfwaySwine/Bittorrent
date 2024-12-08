@@ -220,7 +220,7 @@ class Client:
 
     def send_requests(self):
         self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
-        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece]
+        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece is not None]
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]
