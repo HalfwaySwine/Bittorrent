@@ -132,6 +132,7 @@ class Client:
             path = Path(self.destination)
             self.file.rename(path / self.filename)
             self.file.remove_bitfield_from_disk()
+            print("Torrent download complete!")
             return True
         return False
 
@@ -204,7 +205,7 @@ class Client:
             peer.record_tcp_established()
             if peer.send_handshake() == Status.SUCCESS:
                 logger.info(f"In-progress TCP connection completed to peer at {peer.addr}")
-        print(self.display_peers())
+        logger.debug(self.display_peers())
 
     def send_haves(self, completed_pieces):
         """

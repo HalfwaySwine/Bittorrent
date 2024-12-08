@@ -19,29 +19,43 @@ def configure_logging(args):
     """
     Configures global logger variable for convenient logging to file.
     """
+    logger.propagate = False  # Do not print logs to stderr unless explicitly set.
     if args.debug:
-        logger.propagate = True  # Additionally print logs to stderr.
+        logging_level = logging.DEBUG
         logger.info("Logging set to debug level.")
-        logger.setLevel(logging.DEBUG)
     elif args.info:
-        logger.propagate = True  # Additionally print logs to stderr.
+        logging_level = logging.INFO
         logger.info("Logging set to info level.")
-        logger.setLevel(logging.INFO)
     else:  # Default
-        logger.propagate = False  # Do not print logs to stderr.
+        logging_level = logging.ERROR
         logger.info("Logging set to default level.")
-        logger.setLevel(logging.WARNING)
+    logger.setLevel(logging_level)  # Set level for top-level logger.
+
+    if args.verbose:
+        console_log = True
+    else:
+        console_log = False
 
     if not os.path.exists(LOG_DIRECTORY):
         os.makedirs(LOG_DIRECTORY)
     if not logger.handlers:
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s (%(module)s.%(funcName)s:%(lineno)d)")
-
+        # Configure output to log file.
         file_handler = logging.FileHandler(os.path.join(LOG_DIRECTORY, LOG_FILENAME))
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging_level)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-    logger.info("Logger initialized.")
+        # Configure output to console (stderr).
+        if console_log:
+            logger.info("Logging to console.")
+            console_handler = logging.StreamHandler(sys.stderr)
+            console_handler.setLevel(logging_level)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
+        else:
+            logger.info("Not logging to console.")
+
+    logger.info(f"Logger initialized to level={logger.level} and console_log={console_log}.")
 
 
 def parse_arguments():
@@ -64,6 +78,12 @@ def parse_arguments():
         "--clean",
         action="store_true",
         help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Include logs with console output (stderr).",
     )
     log_group = parser.add_mutually_exclusive_group()  # User can select one level: debug, info, or none (default).
     log_group.add_argument(
