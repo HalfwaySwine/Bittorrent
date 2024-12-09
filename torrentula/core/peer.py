@@ -181,9 +181,6 @@ class Peer:
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
             return self.recieve_handshake()
         else:
-            # once we receive any other message other than a handshake we can't receive a bitmap anymore
-            self.received_handshake = Handshake.HANDSHAKE_RECVD
-
             # prepare new message
             if self.msg_len == None:
                 msg_len_bytes = self.socket.recv(4)
@@ -236,12 +233,15 @@ class Peer:
                     piece_index = int.from_bytes(self.msg_buffer[1:], "big")
                     self.bitfield[piece_index] = 1
                 elif msg_type == MessageType.BITFIELD.value:
-                    bitfield_bytes = self.msg_buffer[1:]
-                    for i in range(len(self.bitfield)):
-                        byte_index = i // 8
-                        index_in_byte = i % 8
-                        byte = bitfield_bytes[byte_index]
-                        self.bitfield[i] = byte >> (7 - index_in_byte) & 1
+                    if self.received_handshake is Handshake.CAN_RECV_BITFIELD:
+                        bitfield_bytes = self.msg_buffer[1:]
+                        for i in range(len(self.bitfield)):
+                            byte_index = i // 8
+                            index_in_byte = i % 8
+                            byte = bitfield_bytes[byte_index]
+                            self.bitfield[i] = byte >> (7 - index_in_byte) & 1
+                    else:
+                        logger.error("Bitfield rejected")
                 elif msg_type == MessageType.REQUEST.value:
                     index, offset, length = struct.unpack(f"!III", self.msg_buffer[1:])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
@@ -266,6 +266,8 @@ class Peer:
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
                     if tup in self.incoming_requests:
                         self.incoming_requests.remove(tup)
+                # once we receive any message other than a handshake we can't receive a bitmap anymore
+                self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.consume_message()
         return Status.SUCCESS
 
