@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from enum import Enum
+from enum import Enum, auto
 from ..config import PEER_INACTIVITY_TIMEOUT_SECS
 from ..utils.helpers import logger, Status
 from .piece import Piece
@@ -31,10 +31,40 @@ class Handshake(Enum):
     HANDSHAKE_RECVD = 2
 
 
+class PeerState(Enum):
+    CREATED = auto()
+    DISCONNECTED = auto()
+    ACCEPTED = auto()
+    SENT_HANDSHAKE = auto()
+    SENT_BITFIELD = auto()
+    AWAIT_BITFIELD = auto()
+    DATA_TRANSFER = auto()
+
+
 class Peer:
     """
     Represents a peer Bittorrent client in the same swarm.
     """
+
+    def get_state(self):
+        if not self.tcp_established:
+            assert self.sent_handshake == Handshake.HANDSHAKE_NOT_RECVD
+            if self.disconnect_count == 0:
+                return PeerState.CREATED
+            else:
+                assert self.disconnect_count > 0
+                return PeerState.DISCONNECTED
+        if self.tcp_established:
+            match self.sent_handshake:
+                case Handshake.HANDSHAKE_RECVD:
+                    # 4 sub-states of upload state: peer_interested X am_choking
+                    # 4 sub-states of download state: am_interested X peer_choking
+                    return PeerState.DATA_TRANSFER
+                case Handshake.HANDSHAKE_NOT_RECVD:
+                    return PeerState.SENT_HANDSHAKE
+                case Handshake.CAN_RECV_BITFIELD:
+                    return PeerState.AWAIT_BITFIELD
+        assert False, "Should be unreachable code."
 
     def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, sock=None, v4=True):
         """
