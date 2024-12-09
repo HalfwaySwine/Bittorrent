@@ -78,7 +78,7 @@ class Peer:
         self.can_send_bitfield = False  # client checks and handles sending bitfields
         self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = sock  # Value is None when this peer is disconnected.
-        self.disconnect_count = 0
+        self.disconnect_count = 0 # never gets reset, currently
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
             self.record_tcp_established()

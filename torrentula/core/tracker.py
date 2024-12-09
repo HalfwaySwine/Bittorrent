@@ -1,6 +1,6 @@
 from ..utils.helpers import logger
 import socket
-from urllib.parse import urlparse, urlencode, quote_plus, unquote_plus
+from urllib.parse import urlparse, urlencode, quote_plus, unquote_plus, quote
 import bencoder
 from .peer import Peer
 from ..config import HTTP_PORT
@@ -70,7 +70,7 @@ class Tracker:
          # Construct get request
         encoded_params = urlencode(params)
         # Construct the HTTP GET request
-        request = f"GET {path}?info_hash={quote_plus(self.info_hash)}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        request = f"GET {path}?info_hash={quote(self.info_hash)}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
         self.sock.sendall(request.encode())
         # Receive response
         response = b""
