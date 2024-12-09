@@ -93,7 +93,6 @@ class Peer:
 
     def record_tcp_established(self):
         self.tcp_established = True
-        self.connection_attempts = 0
         logger.debug(f"Successfully connected to peer at {self.addr}...")
 
     def connect(self):
@@ -268,6 +267,7 @@ class Peer:
                         self.incoming_requests.remove(tup)
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
+                self.connection_attempts = 0
                 self.consume_message()
         return Status.SUCCESS
 
@@ -283,7 +283,7 @@ class Peer:
             # breakpoint()
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
-                logger.info(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+                logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
             logger.error(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
@@ -312,15 +312,15 @@ class Peer:
 
     def receive_messages(self, piece):
         try:
-            status = Status.SUCCESS
+            status = self.receive_messages_helper(piece)
             while status is Status.SUCCESS:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
                 if not rdy:
-                    return status.SUCCESS
+                    break
                 status = self.receive_messages_helper(piece)
             return status
         except Exception as e:
-            logger.debug(f"receive_messages failed with error {repr(e)}, disconnecting")
+            logger.error(f"receive_messages failed with error {repr(e)}, disconnecting")
             self.disconnect()
             return Status.FAILURE
 
