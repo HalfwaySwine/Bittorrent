@@ -49,11 +49,11 @@ class File:
             logger.debug("Error writing bitfield to disk")
 
     def load_bitfield_from_disk(self):
-        logger.debug("attempting to load bitfield from disk")
         """
         Loads bitfield from disk (if it exists) to restart where previous download left off.
         Marks already completed pieces as complete.
         """
+        logger.debug("Attempting to load bitfield from disk")
         try:
             # Check if bitfield and partially downloaded file already exists.
             if os.path.isfile(self.bitfield_path) and os.path.isfile(self.torrent_path):

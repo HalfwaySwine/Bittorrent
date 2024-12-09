@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 import hashlib
 from urllib.parse import quote_plus
 from pathlib import Path
-from .peer import Peer
+from .peer import Peer, Handshake
 import errno
 
 
@@ -119,6 +119,7 @@ class Client:
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
                 self.repaint_progress()
+                self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
             self.send_keepalives()
@@ -132,7 +133,7 @@ class Client:
             path = Path(self.destination)
             self.file.rename(path / self.filename)
             self.file.remove_bitfield_from_disk()
-            print("Torrent download complete!")
+            print("\nTorrent download complete!")
             return True
         return False
 
@@ -213,15 +214,19 @@ class Client:
         """
         # note: shouldn't we send new pieces only once to each peer?
         # maybe we should keep track of pieces we already have notified peers of.
-        self.strategy.send_haves(completed_pieces, self.file.bitfield, self.peers)
+        self.strategy.send_haves(completed_pieces, self.file.bitfield, self.connected_peers())
+
+    def connected_peers(self):
+        return [peer for peer in self.peers if peer.tcp_established and peer.received_handshake == Handshake.HANDSHAKE_RECVD]
 
     def send_keepalives(self):
         for peer in self.peers:
             peer.send_keepalive_if_needed()
 
     def send_requests(self):
-        self.strategy.assign_pieces(self.file.missing_pieces(), self.peers)
-        available_peers = [peer for peer in self.peers if not peer.peer_choking and peer.am_interested and peer.target_piece is not None]
+        connected = self.connected_peers()
+        self.strategy.assign_pieces(self.file.missing_pieces(), connected)
+        available_peers = [peer for peer in connected if not peer.peer_choking and peer.am_interested and peer.target_piece is not None]
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]
@@ -236,12 +241,21 @@ class Client:
                     peer.send_request(peer.target_piece, offset, length)
 
     def send_interested(self):
-        for peer in self.peers:
-            if peer.tcp_established and not peer.am_interested:
-                for index in self.file.missing_pieces():
-                    if peer.bitfield[index] == 1:
-                        peer.send_interested()
-                        break
+        uninterested = [peer for peer in self.connected_peers() if not peer.am_interested]
+        for peer in uninterested:
+            for index in self.file.missing_pieces():
+                if peer.bitfield[index] == 1:
+                    peer.send_interested()
+                    break
+
+    def send_uninterested(self):
+        uninterested = [peer for peer in self.connected_peers() if peer.am_interested]
+        for peer in uninterested:
+            for index in self.file.missing_pieces():
+                if peer.bitfield[index] == 1:
+                    break
+            # Peer has no missing pieces.
+            peer.send_uninterested()
 
     def receive_messages(self):
         sockets_to_peers = {peer.socket: peer for peer in self.peers if peer.tcp_established}
