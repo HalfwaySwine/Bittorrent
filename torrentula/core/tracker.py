@@ -7,7 +7,7 @@ from ..config import HTTP_PORT
 import sys
 from struct import unpack
 import select
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class Tracker:
     """
@@ -16,13 +16,15 @@ class Tracker:
 
     def __init__(self, url, peer_id, info_hash, num_pieces):
         self.url = url
-        self.timestamp = None
+        self.timestamp = datetime.now()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("", HTTP_PORT))
         self.peer_id = peer_id
         self.info_hash = info_hash
         self.num_pieces = num_pieces
+        self.interval = 0
+        self.request_in_progress = False
 
     def join_swarm(self, bytes_left, port) -> list[Peer]:
         """
@@ -31,11 +33,13 @@ class Tracker:
         decoded = self.send_tracker_request(port, 0, 0, bytes_left, "started")
         # Extract information
         # Seconds that the client should wait between sending regular requests to the tracker
-        body = self.recv_tracker_response(1) #blocking recv
-        peer_list = self.parse_tracker_resonse(body)
+        peer_list = self.recv_tracker_response(1) #blocking recv
         return peer_list
 
     def send_tracker_request(self, port, uploaded, downloaded, left, event):
+        if datetime.now() - self.timestamp < timedelta(seconds=self.interval):
+            logger.info("Sent Tracker request too soon :(")
+            return
         params = {
             "peer_id": self.peer_id,
             "port": port,
@@ -59,7 +63,6 @@ class Tracker:
         self.sock.sendall(request.encode())
         self.timestamp = datetime.now()
         self.request_in_progress = True
-        return self.sock
 
     def recv_tracker_response(self, block = 0):
         if self.request_in_progress == True:
@@ -82,8 +85,9 @@ class Tracker:
                     logger.critical(f"{headers}")
                     sys.exit()
                 else:
-                    return body
-        return b''
+                    peer_list = self.parse_tracker_resonse(body)
+                    return peer_list
+        return []
 
     def send_scrape(self):
         #unfinished method, will complete later
@@ -94,7 +98,7 @@ class Tracker:
         host = parsed_url.hostname
         port = parsed_url.port
         self.sock.connect((host, port))
-        request = f"GET /scrape?info_hash={self.info_hash} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
+        request = f"GET /scrape?info_hash={quote(self.info_hash)} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
         self.sock.sendall(request.encode())
         response = b""
         while True:
