@@ -364,7 +364,7 @@ class Peer:
         msg = struct.pack(f"!IB", 1, MessageType.INTERESTED.value)
         return self.send_msg(msg)
 
-    def send_not_interested(self):
+    def send_uninterested(self):
         """also sets our state to not interested"""
         self.am_interested = False
         msg = struct.pack(f"!IB", 1, MessageType.NOT_INTERESTED.value)
