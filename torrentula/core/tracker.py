@@ -56,7 +56,7 @@ class Tracker:
             "uploaded": uploaded,
             "downloaded": downloaded,
             "left": left,
-            "numwant": 30,
+            "numwant": 50,
             "event": event,
         }
         parsed_url = urlparse(self.url)

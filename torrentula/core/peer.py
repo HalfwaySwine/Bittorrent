@@ -79,6 +79,12 @@ class Peer:
         self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = sock  # Value is None when this peer is disconnected.
         self.disconnect_count = 0 # never gets reset, currently
+
+        # recv_messages rework
+        self.msg_buffer = None
+        self.msg_len = None
+        self.loaded_bytes = 0
+
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
             self.record_tcp_established()
@@ -170,126 +176,149 @@ class Peer:
         we also don't really handle unexpected recvs, could cause some erroring that may need to be caught
         """
         logger.debug(f"Receiving message from {self.addr}...")
+        # ig we update time whenever they send us new data no matter the form
+        self.last_received = datetime.now()
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
-
-            pstrlen_bytes = self.socket.recv(1)
-            if len(pstrlen_bytes) == 0:  # No bytes read, but caller believed socket to be readable.
-                # breakpoint()
-                error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                if error != 0:
-                    logger.info(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
-                logger.error(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
-                self.disconnect()
-                return Status.FAILURE
-
-            pstrlen = int.from_bytes(pstrlen_bytes)
-            bytes = self.socket.recv(pstrlen + 48)
-            if len(bytes) == 0:
-                logger.error(f"Expected {pstrlen} bytes from peer at {self.addr} and got {len(bytes)}. Disconnecting...")
-                self.disconnect()
-                return Status.FAILURE
-
-            pstr, padding, info_hash, peer_id = struct.unpack(f"!{pstrlen}s8s20s20s", bytes)
-            logger.debug(f"received {pstr}, {padding}, {info_hash}, {peer_id}")
-            # may want to do smth with pstr, padding, and peer_id
-            # but rn I only care about checking info_hash
-            if info_hash != self.info_hash:
-                self.disconnect()
-                return Status.FAILURE
-            self.received_handshake = Handshake.CAN_RECV_BITFIELD
-            # if the connection was an incoming connection we still need to send our side of the handshake
-            if not self.sent_handshake:
-                self.record_tcp_established()
-                self.send_handshake()
-            # when we return we expect client object to check this value and send bitfield if needed
-            self.can_send_bitfield = True
+            return self.recieve_handshake()
         else:
             # once we receive any other message other than a handshake we can't receive a bitmap anymore
             self.received_handshake = Handshake.HANDSHAKE_RECVD
 
-            msg_len_bytes = self.socket.recv(4)
-            if len(msg_len_bytes) == 0:
-                logger.debug(f"connection closed, disconnecting")
-                self.disconnect()
-                return Status.FAILURE
+            # prepare new message
+            if self.msg_len == None:
+                msg_len_bytes = self.socket.recv(4)
+                if len(msg_len_bytes) == 0:
+                    logger.debug(f"connection closed, disconnecting")
+                    self.disconnect()
+                    return Status.FAILURE
 
-            msg_len = int.from_bytes(msg_len_bytes, "big")
-            logger.debug(f"recieved msg len: {msg_len}")
-            # differentiating from keepalive, we don't have to do anything if it's a keepalive
-            if msg_len > 0:
-                msg = b""
-                while len(msg) < msg_len:
-                    # wait one second, otherwise timeout. If we ever timeout,
-                    # this macgyver solution will not really work because we kinda block too long.
-                    rdy, _, _ = select.select([self.socket], [], [], 1)
+                msg_len = int.from_bytes(msg_len_bytes, "big")
+                logger.debug(f"recieved msg len: {msg_len}")
+                # if keepalive do nothing
+                if msg_len == 0:
+                    self.consume_message()
+                    return Status.SUCCESS
+                self.msg_len = msg_len
+                self.msg_buffer = bytearray(msg_len)
+                
 
-                    # if list is empty we have timed out
-                    if not rdy:
-                        logger.debug("WARNING: timed out on receive_messages, our implementation is gonna be slow")
-                        self.disconnect()
-                        return Status.FAILURE
+            while self.loaded_bytes < self.msg_len:
+                rdy, _, _ = select.select([self.socket], [], [], 0)
 
-                    section = self.socket.recv(msg_len - len(msg))
-                    # recv returns an empty bytes object when the connection is closed
-                    if len(section) == 0:
-                        logger.debug(f"connection closed, disconnecting")
-                        self.disconnect()
-                        return Status.FAILURE
+                # if list is empty we need to wait for the rest
+                if not rdy:
+                    logger.debug(f"waiting for next part of message, {len(self.msg_buffer)}/{self.msg_len}...")
+                    return Status.IN_PROGRESS
 
-                    msg += section
+                section = self.socket.recv(self.msg_len - self.loaded_bytes)
+                # recv returns an empty bytes object when the connection is closed
+                if len(section) == 0:
+                    logger.debug(f"connection closed, disconnecting")
+                    self.disconnect()
+                    return Status.FAILURE
+                
+                self.msg_buffer[self.loaded_bytes:self.loaded_bytes + len(section)] = section
+                self.loaded_bytes += len(section)
 
-                msg_type = int.from_bytes(msg[0:1], "big")
+            # message is ready to be consumed
+            if self.loaded_bytes == self.msg_len:
+                msg_type = int.from_bytes(self.msg_buffer[0:1], "big")
                 logger.debug(f"recieved msg type: {msg_type}")
                 if msg_type == MessageType.CHOKE.value:
                     self.peer_choking = True
-                if msg_type == MessageType.UNCHOKE.value:
+                elif msg_type == MessageType.UNCHOKE.value:
                     self.peer_choking = False
-                if msg_type == MessageType.INTERESTED.value:
+                elif msg_type == MessageType.INTERESTED.value:
                     self.peer_interested = True
-                if msg_type == MessageType.NOT_INTERESTED.value:
+                elif msg_type == MessageType.NOT_INTERESTED.value:
                     self.peer_interested = False
-                if msg_type == MessageType.HAVE.value:
-                    piece_index = int.from_bytes(msg[1:], "big")
+                elif msg_type == MessageType.HAVE.value:
+                    piece_index = int.from_bytes(self.msg_buffer[1:], "big")
                     self.bitfield[piece_index] = 1
-                if msg_type == MessageType.BITFIELD.value:
-                    bitfield_bytes = msg[1:]
+                elif msg_type == MessageType.BITFIELD.value:
+                    bitfield_bytes = self.msg_buffer[1:]
                     for i in range(len(self.bitfield)):
                         byte_index = i // 8
                         index_in_byte = i % 8
                         byte = bitfield_bytes[byte_index]
                         self.bitfield[i] = byte >> (7 - index_in_byte) & 1
-                if msg_type == MessageType.REQUEST.value:
-                    index, offset, length = struct.unpack(f"!III", msg[1:])
+                elif msg_type == MessageType.REQUEST.value:
+                    index, offset, length = struct.unpack(f"!III", self.msg_buffer[1:])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
                     self.incoming_requests.append((index, offset, length))
-                if msg_type == MessageType.PIECE.value:
+                elif msg_type == MessageType.PIECE.value:
                     # will get the block and add it to the piece
                     # 8 bytes after is info
-                    info = msg[1:9]
+                    info = self.msg_buffer[1:9]
                     index, offset = struct.unpack(f"!II", info)
                     logger.debug(f"recieved piece with index: {index}, offset {offset}")
-                    length = msg_len - 9
+                    length = self.msg_len - 9
                     # we should check index and offset against our request
                     tup = (index, offset, length)
                     if tup in self.outgoing_requests:
                         self.outgoing_requests.remove(tup)
-                        piece.add_block(offset, msg[9:])
+                        piece.add_block(offset, self.msg_buffer[9:])
                         self.bytes_received += length
-                if msg_type == MessageType.CANCEL.value:
-                    info = msg[1:]
+                elif msg_type == MessageType.CANCEL.value:
+                    info = self.msg_buffer[1:]
                     index, offset, length = struct.unpack(f"!III", info)
                     tup = (index, offset, length)
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
                     if tup in self.incoming_requests:
                         self.incoming_requests.remove(tup)
-        self.last_received = datetime.now()
+                self.consume_message()
+        return Status.SUCCESS
+
+
+    def consume_message(self):
+        self.msg_len = None
+        self.msg_buffer = None
+        self.loaded_bytes = 0
+
+    def recieve_handshake(self):
+        pstrlen_bytes = self.socket.recv(1)
+        if len(pstrlen_bytes) == 0:  # No bytes read, but caller believed socket to be readable.
+            # breakpoint()
+            error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            if error != 0:
+                logger.info(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+            logger.error(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
+            self.disconnect()
+            return Status.FAILURE
+
+        pstrlen = int.from_bytes(pstrlen_bytes)
+        bytes = self.socket.recv(pstrlen + 48)
+        if len(bytes) == 0:
+            logger.error(f"Expected {pstrlen} bytes from peer at {self.addr} and got {len(bytes)}. Disconnecting...")
+            self.disconnect()
+            return Status.FAILURE
+
+        pstr, padding, info_hash, peer_id = struct.unpack(f"!{pstrlen}s8s20s20s", bytes)
+        logger.debug(f"received {pstr}, {padding}, {info_hash}, {peer_id}")
+        # may want to do smth with pstr, padding, and peer_id
+        # but rn I only care about checking info_hash
+        if info_hash != self.info_hash:
+            self.disconnect()
+            return Status.FAILURE
+        self.received_handshake = Handshake.CAN_RECV_BITFIELD
+        # if the connection was an incoming connection we still need to send our side of the handshake
+        if not self.sent_handshake:
+            self.send_handshake()
+        # when we return we expect client object to check this value and send bitfield if needed
+        self.can_send_bitfield = True
         return Status.SUCCESS
 
     def receive_messages(self, piece):
         try:
-            return self.receive_messages_helper(piece)
+            status = Status.SUCCESS
+            while status is Status.SUCCESS:
+                rdy, _, _ = select.select([self.socket], [], [], 0)
+                if not rdy:
+                    return status.SUCCESS
+                status = self.receive_messages_helper(piece)
+            return status
         except Exception as e:
-            logger.debug(f"receive_messages failed, disconnecting")
+            logger.debug(f"receive_messages failed with error {repr(e)}, disconnecting")
             self.disconnect()
             return Status.FAILURE
 

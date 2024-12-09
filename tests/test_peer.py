@@ -11,6 +11,7 @@ import hashlib
 import socket
 import select
 import time
+import argparse
 
 PIECE_LENGTH = 262144
 BLOCK_SIZE = 16 * 1024  # 16 KB block size
@@ -20,10 +21,10 @@ ADD_PATH = "thisistest.part"
 piece = Piece(0, PIECE_LENGTH, HASH, PIECE_LENGTH, ADD_PATH, 0)
 
 
-# configure_logging("")
+configure_logging(argparse.Namespace(torr='tests/fixtures/debian-mac.torrent', dest='.', clean=False, verbose=True, debug=True, info=False))
 # apparently this guy is a seeder that's always running or smth
-# peer = Peer("72.235.13.154", 6881, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
-peer = Peer("188.242.229.57", 11096, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
+peer = Peer("72.235.13.154", 6881, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
+# peer = Peer("188.242.229.57", 11096, b'\xf3\x1bC\xc3\xa4\x1e\xd3\xf3\xf3\xa4\xd7\x83\x1e~\x9d^\x94ED9', '12345678901234567890', 2516)
 peer.target_piece = piece
 peer.connect()
 print(peer.socket)
@@ -32,7 +33,7 @@ while True:
     if rdy:
         error = rdy[0].getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
         print(error)
-        peer.is_connected = True
+        peer.record_tcp_established()
         break
 peer.send_handshake()
 print("can send bitfield: ", peer.can_send_bitfield)
@@ -62,6 +63,6 @@ while True:
         peer.receive_messages(piece)
     if peer.peer_choking == False and i < 4:
         offset, length = piece.get_next_request()
-        peer.send_request(piece, offset, length)
+        peer.send_request(piece.index, offset, length)
         i += 1
     rdy = []
