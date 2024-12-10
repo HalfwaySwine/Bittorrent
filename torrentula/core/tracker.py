@@ -85,6 +85,7 @@ class Tracker:
                 if status_code >= 400:
                     # TODO: Handle bad/invalid http responses
                     logger.critical(f"{headers}")
+                    logger.error(f"{headers}")
                     sys.exit()
                 else:
                     peer_list = self.parse_tracker_resonse(body)

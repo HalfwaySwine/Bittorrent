@@ -111,7 +111,8 @@ class Peer:
         self.disconnect_count = 0  # never gets reset, currently
 
         # recv_messages rework
-        self.msg_buffer = None
+        # because we send out 16k byte requests we should never need more than this much
+        self.msg_buffer = bytearray(20000)
         self.msg_len = None
         self.loaded_bytes = 0
 
@@ -212,7 +213,7 @@ class Peer:
             return self.receive_handshake()
         else:
             # prepare new message
-            if self.msg_len == None:
+            if self.msg_len is None:
                 msg_len_bytes = self.socket.recv(4)
                 if len(msg_len_bytes) == 0:
                     logger.debug(f"connection closed, disconnecting")
@@ -226,7 +227,8 @@ class Peer:
                     self.consume_message()
                     return Status.SUCCESS
                 self.msg_len = msg_len
-                self.msg_buffer = bytearray(msg_len)
+                if msg_len > 20000:
+                    logger.error(f"msg_len {msg_len} is greater than our buffer size")
 
             while self.loaded_bytes < self.msg_len:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
@@ -259,11 +261,11 @@ class Peer:
                 elif msg_type == MessageType.NOT_INTERESTED.value:
                     self.peer_interested = False
                 elif msg_type == MessageType.HAVE.value:
-                    piece_index = int.from_bytes(self.msg_buffer[1:], "big")
+                    piece_index = int.from_bytes(self.msg_buffer[1:self.msg_len], "big")
                     self.bitfield[piece_index] = 1
                 elif msg_type == MessageType.BITFIELD.value:
                     if self.received_handshake is Handshake.CAN_RECV_BITFIELD:
-                        bitfield_bytes = self.msg_buffer[1:]
+                        bitfield_bytes = self.msg_buffer[1:self.msg_len]
                         for i in range(len(self.bitfield)):
                             byte_index = i // 8
                             index_in_byte = i % 8
@@ -272,24 +274,26 @@ class Peer:
                     else:
                         logger.error("Bitfield rejected")
                 elif msg_type == MessageType.REQUEST.value:
-                    index, offset, length = struct.unpack(f"!III", self.msg_buffer[1:])
+                    index, offset, length = struct.unpack(f"!III", self.msg_buffer[1:self.msg_len])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
                     self.incoming_requests.append((index, offset, length))
                 elif msg_type == MessageType.PIECE.value:
-                    # will get the block and add it to the piece
-                    # 8 bytes after is info
-                    info = self.msg_buffer[1:9]
-                    index, offset = struct.unpack(f"!II", info)
-                    logger.debug(f"recieved piece with index: {index}, offset {offset}")
-                    length = self.msg_len - 9
-                    # we should check index and offset against our request
-                    tup = (index, offset, length)
-                    if tup in self.outgoing_requests:
-                        self.outgoing_requests.remove(tup)
-                        piece.add_block(offset, self.msg_buffer[9:])
-                        self.bytes_received += length
+                    # if we passed in a piece that is not none
+                    if piece:
+                        # will get the block and add it to the piece
+                        # 8 bytes after is info
+                        info = self.msg_buffer[1:9]
+                        index, offset = struct.unpack(f"!II", info)
+                        logger.debug(f"recieved piece with index: {index}, offset {offset}")
+                        length = self.msg_len - 9
+                        # we should check index and offset against our request
+                        tup = (index, offset, length)
+                        if tup in self.outgoing_requests:
+                            self.outgoing_requests.remove(tup)
+                            piece.add_block(offset, self.msg_buffer[9:self.msg_len])
+                            self.bytes_received += length
                 elif msg_type == MessageType.CANCEL.value:
-                    info = self.msg_buffer[1:]
+                    info = self.msg_buffer[1:self.msg_len]
                     index, offset, length = struct.unpack(f"!III", info)
                     tup = (index, offset, length)
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
@@ -303,7 +307,6 @@ class Peer:
 
     def consume_message(self):
         self.msg_len = None
-        self.msg_buffer = None
         self.loaded_bytes = 0
 
     def receive_handshake(self):
@@ -313,7 +316,8 @@ class Peer:
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
                 logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
-            logger.error(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
+            # downgrade from error, this happens very often 
+            logger.info(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
 

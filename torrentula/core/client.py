@@ -257,7 +257,6 @@ class Client:
                     else: #failed
                         logger.debug(f"Data failed to send back to {peer.addr}")
 
-
     def send_keepalives(self):
         for peer in self.peers:
             peer.send_keepalive_if_needed()
