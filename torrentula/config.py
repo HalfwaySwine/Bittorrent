@@ -12,7 +12,7 @@ HTTP_PORT = 0
 BITTORRENT_PORT = 6881
 IN_PROGRESS_FILENAME_SUFFIX = ".part"
 BITFIELD_FILE_SUFFIX = ".bitfield"
-NUM_RAREST_PIECES = 3  # The number of top rarest pieces to randomly choose from.
+NUM_RAREST_PIECES = 5  # The number of top rarest pieces to randomly choose from.
 MAX_CONNECTION_ATTEMPTS = 10
 
 # Primary performance tuning parameters

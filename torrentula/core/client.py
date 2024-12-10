@@ -37,6 +37,8 @@ class Client:
     def __init__(self, torrent_file: str, destination: str = ".", port: int = BITTORRENT_PORT):
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
+        self.download_speed = 0  # Measured per epoch in KB/s
+        self.upload_speed = 0  # Measured per epoch in KB/s
         self.peers = []  # Connected clients within same swarm
         self.port = port
         self.peer_id = Client.generate_id()
@@ -146,8 +148,14 @@ class Client:
         logger.info(f"Listening for connections on {host}:{self.port}...")
 
     def establish_new_epoch(self):
+        total_downloaded = 0
+        total_uploaded = 0
         for peer in self.peers:
-            peer.establish_new_epoch()
+            downloaded, uploaded = peer.establish_new_epoch()
+            total_downloaded += downloaded
+            total_uploaded += uploaded
+        self.download_speed = total_downloaded / 10_485_760  # Convert bytes to MB and average over 10 seconds.
+        self.uploaded_speed = total_uploaded / 10_485_760
         self.execute_choke_transition()
         self.epoch_start_time = datetime.now()
         logger.debug("Established new epoch.")
@@ -297,7 +305,9 @@ class Client:
         connected_peers: int = len([peer for peer in self.peers if peer.tcp_established])
         output = f"File: {self.filename} | "
         output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
-        output += f"Completed: {self.file.get_progress()}"
+        output += f"Completed: {self.file.get_progress()} | "
+        output += f"Download Speed: {self.download_speed:.2f} MB/s | "
+        output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
         sys.stdout.write("\033[2K\r")  # Clear the line
         sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
         sys.stdout.flush()  # Ensure the output is written immediately
