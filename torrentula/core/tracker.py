@@ -5,11 +5,22 @@ import bencoder
 from .peer import Peer
 from ..config import HTTP_PORT, TRACKER_NUMWANT
 import sys
-from struct import unpack
+from struct import unpack, pack
 import select
 from datetime import datetime, timedelta
+import random
 
-
+udp = True
+#udp://tracker.torrent.eu.org:451/
+UDP_HOST = "tracker.torrent.eu.org"
+UDP_PORT = 451
+#udp://tracker1.bt.moack.co.kr:80
+#udp://tracker.dump.cl:6969
+#udp://tracker.bittor.pw:1337
+#udp://open.demonii.com:1337
+UDP_HOST1 = "tracker.bittor.pw"
+UDP_PORT1 = 1337
+#udp://128.8.126.63:554
 class Tracker:
     """
     Server managing swarm associated with a torrent. A client can join the swarm by sending a request to this server using its associated url or IP address.
@@ -18,7 +29,10 @@ class Tracker:
     def __init__(self, url, peer_id, info_hash, num_pieces):
         self.url = url
         self.timestamp = datetime.now()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if udp:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        else:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("", HTTP_PORT))
         self.peer_id = peer_id
@@ -31,7 +45,9 @@ class Tracker:
         """
         Returns: Returns a list of peer objects and sets request interval if successful. Terminates program if there is an error.
         """
-        decoded = self.send_tracker_request(port, 0, 0, bytes_left, "started")
+        if udp:
+            self.send_tracker_connect_request_udp()
+        return self.send_tracker_request(port, 0, 0, bytes_left, "started")
         # Extract information
         # Seconds that the client should wait between sending regular requests to the tracker
         peer_list = self.recv_tracker_response(1)  # blocking recv
@@ -41,6 +57,29 @@ class Tracker:
         if datetime.now() - self.timestamp < timedelta(seconds=self.interval):
             logger.info("Sent Tracker request too soon :(")
             return
+        if udp:
+            transaction_id = random.randint(0, 2**32 - 1)
+            print(f"{transaction_id}")
+            action = 1  # 1 for announce
+            event_udp = 0  # 0: none, 1: completed, 2: started, 3: stopped
+            ip_address = 0  # Default
+            key = 0
+            announce_request = pack(">QII20s20sQQQIIIiH",
+                self.connection_id, action, transaction_id, self.info_hash, self.peer_id.encode(),
+                downloaded, left, uploaded, event_udp, ip_address, key, TRACKER_NUMWANT, port)
+            self.sock.sendto(announce_request, (UDP_HOST, UDP_PORT))
+            response, msg = self.sock.recvfrom(2048)
+            action, received_transaction_id, interval, leechers, seeders = unpack(">IIIII", response[:20])
+            print(f"{action}, {received_transaction_id}, interval: {interval}, leechers: {leechers}, seeders: {seeders}")
+            peers_data = response[20:]
+            peer_list = []
+            for i in range(0, len(peers_data), 6):
+                ip_tuple = unpack(">BBBB", peers_data[i:i+4])
+                ip_string = '.'.join(map(str, ip_tuple))
+                port = unpack(">H", peers_data[i+4:i+6])[0]
+                print(f"{ip_string}:{port}")
+                peer_list.append(Peer(ip_string, port, self.info_hash, self.peer_id, self.num_pieces))
+            return peer_list
         params = {
             "peer_id": self.peer_id,
             "port": port,
@@ -85,7 +124,6 @@ class Tracker:
                 if status_code >= 400:
                     # TODO: Handle bad/invalid http responses
                     logger.critical(f"{headers}")
-                    logger.error(f"{headers}")
                     sys.exit()
                 else:
                     peer_list = self.parse_tracker_resonse(body)
@@ -154,3 +192,24 @@ class Tracker:
     def disconnect(self):
         if self.sock:
             self.sock.close()
+
+    def send_tracker_connect_request_udp(self):
+        # obtain a connection ID - send Connect requeset
+        protocol_id = 0x41727101980
+        action = 0 # Connect
+        transaction_id = random.randint(0, 2**32 - 1)
+        url ="udp://128.8.126.63:55443" #hardcoding url
+        parsed_url = urlparse(self.url)
+        host = parsed_url.hostname
+        port = parsed_url.port
+        path = parsed_url.path
+        print(path)
+        request = pack(">QII", protocol_id, action, transaction_id)
+        self.sock.sendto(request, (UDP_HOST, UDP_PORT))
+
+        #receive connect response
+        response, _ = self.sock.recvfrom(1024)
+        action, received_transaction_id, connection_id = unpack(">IIQ", response)
+        assert(transaction_id == received_transaction_id)
+        self.connection_id = connection_id
+        print(connection_id)
