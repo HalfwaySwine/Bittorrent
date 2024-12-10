@@ -115,6 +115,8 @@ class Peer:
         # because we send out 16k byte requests we should never need more than this much
         self.msg_buffer = bytearray(20000)
         self.msg_len = None
+        self.msg_len_bytes = bytearray(4)
+        self.msg_len_loaded_bytes = 0
         self.loaded_bytes = 0
 
         # if we pass in a socket we are already connected, send handshake
@@ -175,6 +177,8 @@ class Peer:
         self.bytes_sent = 0
         self.disconnect_count += 1
 
+        self.consume_message()
+
     def send_handshake(self):
         """
         Send handshake message.
@@ -214,15 +218,23 @@ class Peer:
             return self.receive_handshake()
         else:
             # prepare new message
-            if self.msg_len is None:
-                msg_len_bytes = self.socket.recv(4)
-                if len(msg_len_bytes) == 0:
-                    logger.debug(f"connection closed, disconnecting")
-                    self.disconnect()
-                    return Status.FAILURE
+            if self.msg_len == None:
+                # ensure we recv 4 every time
+                try:
+                    while self.msg_len_loaded_bytes < 4:
+                        additional = self.socket.recv(4 - self.msg_len_loaded_bytes)
+                        if len(additional) == 0:
+                            logger.debug(f"connection closed, disconnecting")
+                            self.disconnect()
+                            return Status.FAILURE
+                        self.msg_len_bytes[self.msg_len_loaded_bytes: self.msg_len_loaded_bytes + len(additional)] = additional
+                        self.msg_len_loaded_bytes += len(additional)
+                except BlockingIOError as e:
+                    logger.debug(f"waiting for next part of msg_len...")
+                    return Status.IN_PROGRESS
 
-                msg_len = int.from_bytes(msg_len_bytes, "big")
-                logger.debug(f"recieved msg len: {msg_len}")
+                msg_len = int.from_bytes(self.msg_len_bytes, "big")
+                logger.debug(f"recieved msg len: {msg_len} from peer {self.addr}")
                 # if keepalive do nothing
                 if msg_len == 0:
                     self.consume_message()
@@ -232,31 +244,31 @@ class Peer:
                     logger.error(f"peer {self.addr}'s msg_len {msg_len} is greater than our buffer size, disconnecting")
                     self.disconnect()
                     return Status.FAILURE
+            try:
+                while self.loaded_bytes < self.msg_len:
+                    section = self.socket.recv(self.msg_len - self.loaded_bytes)
+                    # recv returns an empty bytes object when the connection is closed
+                    if len(section) == 0:
+                        logger.debug(f"connection closed, disconnecting")
+                        self.disconnect()
+                        return Status.FAILURE
 
-            while self.loaded_bytes < self.msg_len:
-                rdy, _, _ = select.select([self.socket], [], [], 0)
+                    self.msg_buffer[self.loaded_bytes : self.loaded_bytes + len(section)] = section
+                    self.loaded_bytes += len(section)
+            except BlockingIOError as e:
+                logger.debug(f"waiting for next part of message, {self.loaded_bytes}/{self.msg_len}...")
+                return Status.IN_PROGRESS
 
-                # if list is empty we need to wait for the rest
-                if not rdy:
-                    logger.debug(f"waiting for next part of message, {self.loaded_bytes}/{self.msg_len}...")
-                    return Status.IN_PROGRESS
-
-                section = self.socket.recv(self.msg_len - self.loaded_bytes)
-                # recv returns an empty bytes object when the connection is closed
-                if len(section) == 0:
-                    logger.debug(f"connection closed, disconnecting")
-                    self.disconnect()
-                    return Status.FAILURE
-
-                self.msg_buffer[self.loaded_bytes : self.loaded_bytes + len(section)] = section
-                self.loaded_bytes += len(section)
 
             if self.loaded_bytes > self.msg_len or self.loaded_bytes < self.msg_len:
                 logger.error(f"received {self.loaded_bytes - self.msg_len} more bytes than expected?")
             # message is ready to be consumed
-            if self.loaded_bytes == self.msg_len:
+            if self.loaded_bytes == self.msg_len and self.msg_len != 0:
+                # probably remove sometime
+                if self.msg_len == 64:
+                    logger.error(f"buffer of size 64: {self.msg_buffer[:self.msg_len]}")
                 msg_type = int.from_bytes(self.msg_buffer[0:1], "big")
-                logger.debug(f"recieved msg type: {msg_type}")
+                logger.debug(f"recieved msg type: {msg_type} from peer {self.addr}")
                 if msg_type == MessageType.CHOKE.value:
                     self.peer_choking = True
                 elif msg_type == MessageType.UNCHOKE.value:
@@ -305,9 +317,9 @@ class Peer:
                     if tup in self.incoming_requests:
                         self.incoming_requests.remove(tup)
                 elif msg_type == MessageType.PORT.value:
-                    # have to recv 2 bytes of the port due to the weird nature of the port message?
-                    # _ = self.socket.recv(2)
                     pass
+                else:
+                    logger.error(f"we got a weird type: {msg_type}")
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.connection_attempts = 0
@@ -319,6 +331,7 @@ class Peer:
         # logger.error(f"consumed message of len {self.msg_len} from peer {self.addr}")
         self.msg_len = None
         self.loaded_bytes = 0
+        self.msg_len_loaded_bytes = 0
 
     def receive_handshake(self):
         pstrlen_bytes = self.socket.recv(1)
@@ -355,7 +368,7 @@ class Peer:
         return Status.SUCCESS
 
     def receive_messages(self, piece):
-        try:
+        # try:
             status = self.receive_messages_helper(piece)
             while status is Status.SUCCESS:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
@@ -363,10 +376,10 @@ class Peer:
                     break
                 status = self.receive_messages_helper(piece)
             return status
-        except Exception as e:
-            logger.error(f"receive_messages failed with error {repr(e)}, disconnecting")
-            self.disconnect()
-            return Status.FAILURE
+        # except Exception as e:
+        #     logger.error(f"receive_messages failed with error {repr(e)}, disconnecting")
+        #     self.disconnect()
+        #     return Status.FAILURE
 
     def send_keepalive(self):
         msg = struct.pack("!4x")
