@@ -208,7 +208,7 @@ class Peer:
         # ig we update time whenever they send us new data no matter the form
         self.last_received = datetime.now()
         if self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD:
-            return self.recieve_handshake()
+            return self.receive_handshake()
         else:
             # prepare new message
             if self.msg_len == None:
@@ -307,7 +307,7 @@ class Peer:
         self.msg_buffer = None
         self.loaded_bytes = 0
 
-    def recieve_handshake(self):
+    def receive_handshake(self):
         pstrlen_bytes = self.socket.recv(1)
         if len(pstrlen_bytes) == 0:  # No bytes read, but caller believed socket to be readable.
             # breakpoint()
