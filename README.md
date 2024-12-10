@@ -39,7 +39,9 @@ torrentula.download_torrent(<your-torrent.torrent>, <download-directory>)
 This method allows for integration of the torrent client directly within Python applications.
 
 ### Development
-
+profiling:
+python -m cProfile -o output.prof -m torrentula --torr tests/fixtures/debian-mac.torrent
+python -m pstats output.prof 
 #### Running Tests
 The library tests can be automatically discovered and ran by the unittests library. Example torrents for testing are in the fixtures folder.
 ```python

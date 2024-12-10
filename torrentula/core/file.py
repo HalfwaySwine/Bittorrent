@@ -15,14 +15,13 @@ class File:
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
         self.length = length
         self.initialize_file()
-        self.totalUploaded = 0 # in bytes 
+        self.totalUploaded = 0  # in bytes
         logger.debug("Attepting to init pieces")
-        self.pieces: list[Piece] = [
-            Piece(index, piece_length, hash, length, self.torrent_path, self.file) for index, hash in enumerate(hashes)
-        ]
+        self.pieces: list[Piece] = [Piece(index, piece_length, hash, length, self.torrent_path, self.file) for index, hash in enumerate(hashes)]
         self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length  # TODO check this
         logger.debug(f"File - last piece length {length - (len(self.pieces) - 1) * piece_length}")
         self.bitfield: list[int] = self.load_bitfield_from_disk()
+        self.initialize_missing_pieces()
 
     def initialize_file(self):
         if os.path.exists(self.torrent_path):  # Open existing file without overwriting
@@ -85,6 +84,7 @@ class File:
         newly_completed = []
         for index, bit in enumerate(self.bitfield):
             if bit == 0 and self.pieces[index].complete:
+                self.missing_pieces_set.remove(index)
                 newly_completed.append(index)
                 self.bitfield[index] = 1
 
@@ -99,7 +99,6 @@ class File:
 
     def get_progress(self):
         return f"{self.total_downloaded_percentage():.2f}% ({self.bytes_downloaded() / 1_000_000:.2f} MB of {self.length / 1_000_000:.2f} MB)"
-
 
     def __str__(self):
         print("===Overall===")
@@ -123,11 +122,13 @@ class File:
 
     def missing_pieces(self):
         """Returns a list of pieces that have not yet been fully downloaded and/or verified."""
-        missing = []
+        return self.missing_pieces_set
+
+    def initialize_missing_pieces(self):
+        self.missing_pieces_set = set()
         for index, bit in enumerate(self.bitfield):
             if bit == 0:
-                missing.append(index)
-        return missing
+                self.missing_pieces_set.add(index)
 
     def has_pieces(self):
         """Returns a list of pieces that have been downloaded and verified."""
@@ -139,7 +140,7 @@ class File:
 
     def complete(self) -> bool:
         """Returns True if file is complete, False otherwise."""
-        return self.missing_pieces() == []
+        return not self.missing_pieces()
 
     def bytes_left(self) -> int:
         """
@@ -167,8 +168,8 @@ class File:
         total = self.length - self.bytes_downloaded_unverified()
         logger.debug("{total} bytes left (based on unverified data)")
         return total
-    
-    def get_total_uploaded_bytes(self): 
+
+    def get_total_uploaded_bytes(self):
         logger.debug(f"{self.totalUploaded} bytes uploaded")
         return self.totalUploaded
 
