@@ -23,6 +23,7 @@ class File:
         self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length  # TODO check this
         logger.debug(f"File - last piece length {length - (len(self.pieces) - 1) * piece_length}")
         self.bitfield: list[int] = self.load_bitfield_from_disk()
+        self.initialize_missing_pieces()
 
     def initialize_file(self):
         if os.path.exists(self.torrent_path):  # Open existing file without overwriting
@@ -85,6 +86,7 @@ class File:
         newly_completed = []
         for index, bit in enumerate(self.bitfield):
             if bit == 0 and self.pieces[index].complete:
+                self.missing_pieces.remove(index)
                 newly_completed.append(index)
                 self.bitfield[index] = 1
 
@@ -123,11 +125,13 @@ class File:
 
     def missing_pieces(self):
         """Returns a list of pieces that have not yet been fully downloaded and/or verified."""
-        missing = []
+        return self.missing_pieces
+
+    def initialize_missing_pieces(self):
+        self.missing_pieces = set()
         for index, bit in enumerate(self.bitfield):
             if bit == 0:
-                missing.append(index)
-        return missing
+                self.missing_pieces.add(index)
 
     def has_pieces(self):
         """Returns a list of pieces that have been downloaded and verified."""
