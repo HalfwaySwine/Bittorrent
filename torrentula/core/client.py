@@ -249,13 +249,16 @@ class Client:
                     break
 
     def send_uninterested(self):
-        uninterested = [peer for peer in self.connected_peers() if peer.am_interested]
-        for peer in uninterested:
+        interested = [peer for peer in self.connected_peers() if peer.am_interested]
+        for peer in interested:
+            have_missing_piece = False
             for index in self.file.missing_pieces():
                 if peer.bitfield[index] == 1:
+                    have_missing_piece = True
                     break
             # Peer has no missing pieces.
-            peer.send_uninterested()
+            if not have_missing_piece:
+                peer.send_uninterested()
 
     def receive_messages(self):
         sockets_to_peers = {peer.socket: peer for peer in self.peers if peer.tcp_established}
