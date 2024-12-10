@@ -169,7 +169,7 @@ class File:
         return total
     
     def get_total_uploaded_bytes(self): 
-        logger.debug("{total} bytes uploaded")
+        logger.debug(f"{self.totalUploaded} bytes uploaded")
         return self.totalUploaded
 
     def bytes_downloaded_unverified(self):
