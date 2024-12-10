@@ -112,8 +112,15 @@ class Client:
         self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
+        track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
+
+            # # only uncomment if you need it, will flood log
+            # while_loop_delta_2 = datetime.now()
+            # logger.error(f"Time of while loop: {while_loop_delta_2 - track_while_loop_delta}")
+            # track_while_loop_delta = while_loop_delta_2
+            
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
