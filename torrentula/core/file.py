@@ -15,6 +15,7 @@ class File:
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
         self.length = length
         self.initialize_file()
+        self.totalUploaded = 0 # in bytes 
         logger.debug("Attepting to init pieces")
         self.pieces: list[Piece] = [
             Piece(index, piece_length, hash, length, self.torrent_path, self.file) for index, hash in enumerate(hashes)
@@ -99,6 +100,7 @@ class File:
     def get_progress(self):
         return f"{self.total_downloaded_percentage():.2f}% ({self.bytes_downloaded() / 1_000_000:.2f} MB of {self.length / 1_000_000:.2f} MB)"
 
+
     def __str__(self):
         print("===Overall===")
         print(f"Progress: {self.bytes_downloaded()} / {self.length} ({self.total_downloaded_percentage:.2f}%)")
@@ -165,6 +167,10 @@ class File:
         total = self.length - self.bytes_downloaded_unverified()
         logger.debug("{total} bytes left (based on unverified data)")
         return total
+    
+    def get_total_uploaded_bytes(self): 
+        logger.debug("{total} bytes uploaded")
+        return self.totalUploaded
 
     def bytes_downloaded_unverified(self):
         """

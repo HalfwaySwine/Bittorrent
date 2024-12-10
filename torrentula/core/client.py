@@ -219,6 +219,25 @@ class Client:
     def connected_peers(self):
         return [peer for peer in self.peers if peer.tcp_established and peer.received_handshake == Handshake.HANDSHAKE_RECVD]
 
+    def send_requests_reponses_back(self):
+        """
+        Sends data to pieces who are unchoked and have requested data
+        """
+        for peer in self.peers: 
+            if peer.am_choking == False: #checks if choking
+                if len(peer.incoming_requests) > 0: 
+                    data = peer.incoming_requests[0]
+                    flag = peer.send_piece(data[0], data[1], data[2])
+                    if flag == Status.SUCCESS: 
+                        self.file.totalUploaded += data[2] #update total uploaded
+                        logger.debug(f"Data send back to {peer.addr} successfully")
+                    else: #failed
+                        logger.debug(f"Data failed to send back to {peer.addr}")
+
+                    
+                    
+
+
     def send_keepalives(self):
         for peer in self.peers:
             peer.send_keepalive_if_needed()

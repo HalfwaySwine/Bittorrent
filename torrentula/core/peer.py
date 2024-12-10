@@ -405,9 +405,11 @@ class Peer:
         """Also takes care of the outgoing requests list, if we didn't request it before, fail"""
         tup = (index, offset, length)
         if tup in self.outgoing_requests:
-            self.outgoing_requests.remove(tup)
             msg = struct.pack(f"!IBIII", 13, MessageType.CANCEL.value, index, offset, length)
-            return self.send_msg(msg)
+            flag = self.send_msg(msg)
+            if flag == Status.SUCCESS: 
+                self.outgoing_requests.remove(tup)
+                return Status.SUCCESS
         return Status.FAILURE
 
     def send_msg(self, msg):
