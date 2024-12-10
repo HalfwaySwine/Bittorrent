@@ -3,11 +3,12 @@ import socket
 from urllib.parse import urlparse, urlencode, quote_plus, unquote_plus, quote
 import bencoder
 from .peer import Peer
-from ..config import HTTP_PORT
+from ..config import HTTP_PORT, TRACKER_NUMWANT
 import sys
 from struct import unpack
 import select
 from datetime import datetime, timedelta
+
 
 class Tracker:
     """
@@ -33,7 +34,7 @@ class Tracker:
         decoded = self.send_tracker_request(port, 0, 0, bytes_left, "started")
         # Extract information
         # Seconds that the client should wait between sending regular requests to the tracker
-        peer_list = self.recv_tracker_response(1) #blocking recv
+        peer_list = self.recv_tracker_response(1)  # blocking recv
         return peer_list
 
     def send_tracker_request(self, port, uploaded, downloaded, left, event):
@@ -46,7 +47,7 @@ class Tracker:
             "uploaded": uploaded,
             "downloaded": downloaded,
             "left": left,
-            "numwant": 50,
+            "numwant": TRACKER_NUMWANT,
             "event": event,
         }
         parsed_url = urlparse(self.url)
@@ -57,7 +58,7 @@ class Tracker:
         logger.debug(f"Attempting to connect to tracker at {host}:{port} over TCP...")
         self.sock.connect(tracker_addr)
 
-         # Construct get request
+        # Construct get request
         encoded_params = urlencode(params)
         # Construct the HTTP GET request
         request = f"GET {path}?info_hash={quote(self.info_hash)}&{encoded_params} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: */*\r\n\r\n"
@@ -65,7 +66,7 @@ class Tracker:
         self.timestamp = datetime.now()
         self.request_in_progress = True
 
-    def recv_tracker_response(self, block = 0):
+    def recv_tracker_response(self, block=0):
         if self.request_in_progress == True:
             response = b""
             rdy, _, _ = select.select([self.sock], [], [], 0)
@@ -91,7 +92,7 @@ class Tracker:
         return []
 
     def send_scrape(self):
-        #unfinished method, will complete later
+        # unfinished method, will complete later
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(("", HTTP_PORT))
@@ -130,14 +131,14 @@ class Tracker:
             self.interval = decoded[b"interval"]
         if b"peers" in decoded:
             peers = decoded[b"peers"]
-            if isinstance(peers, bytes): #compact form
+            if isinstance(peers, bytes):  # compact form
                 logger.info("Tracker sent peers in compact format.")
                 for i in range(0, len(peers), 6):
-                    peer_data = peers[i:i + 6]
+                    peer_data = peers[i : i + 6]
                     ip = ".".join(map(str, peer_data[:4]))
                     port = unpack(">H", peer_data[4:])[0]
                     peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
-            else: #non compact form
+            else:  # non compact form
                 logger.info("Tracker sent peers in normal (not compact) format.")
                 for peer in decoded[b"peers"]:
                     ip = peer[b"ip"].decode("utf-8")
@@ -145,7 +146,7 @@ class Tracker:
                     peer_list.append(Peer(ip, port, self.info_hash, self.peer_id, self.num_pieces))
                     logger.debug(f"Peer: {ip}:{port}")
         if b"failure reason" in decoded:
-            failure_reason = decoded[b"failure reason"].decode('utf-8')
+            failure_reason = decoded[b"failure reason"].decode("utf-8")
             logger.critical(f"Query failed. Reason: {failure_reason}")
         return peer_list
 
