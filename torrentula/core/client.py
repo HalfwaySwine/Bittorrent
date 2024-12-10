@@ -17,6 +17,7 @@ import traceback
 import os
 import sys
 import signal
+import time
 import socket
 import select
 from random import choices
@@ -35,6 +36,7 @@ class Client:
     """
 
     def __init__(self, torrent_file: str, destination: str = ".", port: int = BITTORRENT_PORT):
+        self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
         self.download_speed = 0  # Measured per epoch in KB/s
@@ -76,6 +78,10 @@ class Client:
         calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size
         assert calc_size_total == self.length, "Error: Torrent length, piece length and hashes do not match!"
         self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
+        # Initialize variables for upload/download tracking statistics.
+        # self.last_bytes_downloaded = self.file.bytes_downloaded()
+        # self.last_bytes_uploaded = self.file.bytes_uploaded()
+        # self.last_interval = time.monotonic()
 
     @classmethod
     def generate_id(cls):
@@ -327,9 +333,23 @@ class Client:
         return output
 
     def repaint_progress(self):
-        # - Download Speed: TBD
+        # Calculate upload and download speeds
+        # secs_since_last_repaint = time.monotonic() - self.last_interval
+        # bytes_downloaded_since_last_repaint = self.file.bytes_downloaded() - self.last_bytes_downloaded
+        # bytes_uploaded_since_last_repaint = self.file.bytes_uploaded() - self.last_bytes_uploaded
+        # Convert bytes to MB and average over seconds since last repaint.
+        # self.download_speed = bytes_downloaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
+        # self.uploaded_speed = bytes_uploaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
+
+        # Calculate time elapsed
+        time_elapsed = time.monotonic() - self.start_time
+        minutes = int(time_elapsed // 60)
+        seconds = int(time_elapsed % 60)
+
         connected_peers: int = len([peer for peer in self.peers if peer.tcp_established])
+        # Construct output string
         output = f"File: {self.filename} | "
+        output += f"Time: {minutes}:{seconds:02d} | "
         output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
         output += f"Completed: {self.file.get_progress()} | "
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
@@ -337,6 +357,11 @@ class Client:
         sys.stdout.write("\033[2K\r")  # Clear the line
         sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
         sys.stdout.flush()  # Ensure the output is written immediately
+
+        # Update variables for next call
+        # self.last_interval = time.monotonic()
+        # self.last_bytes_downloaded = self.file.bytes_downloaded()
+        # self.last_bytes_uploaded = self.file.bytes_uploaded()
 
     def __str__(self):
         """
