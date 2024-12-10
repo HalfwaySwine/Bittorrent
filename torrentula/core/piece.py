@@ -137,6 +137,7 @@ class Piece:
         except Exception as e:
             print("Error reading from disk: " + str(e))
             logger.debug("Error reading from disk")
+            return 0
 
     def set_complete_from_prev_download(self):
         """

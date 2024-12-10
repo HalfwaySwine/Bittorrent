@@ -131,6 +131,7 @@ class Client:
                 self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
+            #self.send_requests_reponses_back()
             self.send_keepalives()
             self.send_interested()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
@@ -242,15 +243,15 @@ class Client:
             if peer.am_choking == False: #checks if choking
                 if len(peer.incoming_requests) > 0: 
                     data = peer.incoming_requests[0]
-                    flag = peer.send_piece(data[0], data[1], data[2])
+                    dataToSend = self.file.get_data_from_piece(data[1], data[2], data[0])
+                    if dataToSend == 0: #issue getting data 
+                        continue
+                    flag = peer.send_piece(data[0], data[1], dataToSend)
                     if flag == Status.SUCCESS: 
                         self.file.totalUploaded += data[2] #update total uploaded
                         logger.debug(f"Data send back to {peer.addr} successfully")
                     else: #failed
                         logger.debug(f"Data failed to send back to {peer.addr}")
-
-                    
-                    
 
 
     def send_keepalives(self):

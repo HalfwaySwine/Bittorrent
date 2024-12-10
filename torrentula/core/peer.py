@@ -152,7 +152,8 @@ class Peer:
         """
         Closes socket and resets connection params.
         """
-        self.socket.close()
+        if self.socket is not None: 
+            self.socket.close()
 
         # reset most parameters, maybe have to add some
         self.outgoing_requests = []  # reset list, we don't expect requests to be fulfilled
@@ -393,7 +394,7 @@ class Peer:
     def send_piece(self, index, offset, data):
         """sends data, passed in as bytes, as well as the index and offset of it
         also takes care of the incoming requests list, if it wasn't in there, fail"""
-        tup = (index, offset, data)
+        tup = (index, offset, len(data))
         if tup in self.incoming_requests:
             msg_len = len(data) + 9
             msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)

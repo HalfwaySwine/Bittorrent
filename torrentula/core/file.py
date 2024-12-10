@@ -181,6 +181,14 @@ class File:
             total += piece.downloaded
         logger.debug(f"{total} bytes downloaded (based on unverified data)")
         return total
+    
+    def get_data_from_piece(self, offset, length, index):
+        for i, piece in enumerate(self.pieces): 
+            if i == index:
+                data = piece.get_data_from_file(offset, length)
+                return data
+        return 0
+
 
     def rename(self, new):
         """Renames the file. Used when the download is complete to remove the temporary suffix."""
