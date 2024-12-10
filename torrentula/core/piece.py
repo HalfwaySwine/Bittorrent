@@ -152,7 +152,7 @@ class Piece:
         self.pieceBuffer = bytearray(self.length)
         for offset, block in self.blocks.items():
             self.pieceBuffer[offset : offset + block.get_length()] = block.get_data()
-        self.blocks = None
+        self.blocks = {}
 
     # checks if the completed block matches the hash, pulls from memory (helper fucntion)
     def _is_valid(self):

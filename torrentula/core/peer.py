@@ -20,6 +20,7 @@ class MessageType(Enum):
     REQUEST = 6
     PIECE = 7
     CANCEL = 8
+    PORT = 9
 
 
 class Handshake(Enum):
@@ -228,14 +229,16 @@ class Peer:
                     return Status.SUCCESS
                 self.msg_len = msg_len
                 if msg_len > 20000:
-                    logger.error(f"msg_len {msg_len} is greater than our buffer size")
+                    logger.error(f"peer {self.addr}'s msg_len {msg_len} is greater than our buffer size, disconnecting")
+                    self.disconnect()
+                    return Status.FAILURE
 
             while self.loaded_bytes < self.msg_len:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
 
                 # if list is empty we need to wait for the rest
                 if not rdy:
-                    logger.debug(f"waiting for next part of message, {len(self.msg_buffer)}/{self.msg_len}...")
+                    logger.debug(f"waiting for next part of message, {self.loaded_bytes}/{self.msg_len}...")
                     return Status.IN_PROGRESS
 
                 section = self.socket.recv(self.msg_len - self.loaded_bytes)
@@ -248,6 +251,8 @@ class Peer:
                 self.msg_buffer[self.loaded_bytes : self.loaded_bytes + len(section)] = section
                 self.loaded_bytes += len(section)
 
+            if self.loaded_bytes > self.msg_len or self.loaded_bytes < self.msg_len:
+                logger.error(f"received {self.loaded_bytes - self.msg_len} more bytes than expected?")
             # message is ready to be consumed
             if self.loaded_bytes == self.msg_len:
                 msg_type = int.from_bytes(self.msg_buffer[0:1], "big")
@@ -299,13 +304,19 @@ class Peer:
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
                     if tup in self.incoming_requests:
                         self.incoming_requests.remove(tup)
+                elif msg_type == MessageType.PORT.value:
+                    # have to recv 2 bytes of the port due to the weird nature of the port message?
+                    # _ = self.socket.recv(2)
+                    pass
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.connection_attempts = 0
                 self.consume_message()
+
         return Status.SUCCESS
 
     def consume_message(self):
+        # logger.error(f"consumed message of len {self.msg_len} from peer {self.addr}")
         self.msg_len = None
         self.loaded_bytes = 0
 
