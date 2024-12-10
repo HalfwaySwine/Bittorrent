@@ -95,7 +95,7 @@ class Peer:
         self.connection_attempts = 0  # Reset upon success
         self.handshake_attempts = 0  # Never reset
 
-        self.outgoing_requests = []  # List of pieces that we have requested from the peer but have not completed.
+        self.outgoing_requests = set()  # List of pieces that we have requested from the peer but have not completed.
         self.incoming_requests = []  # list of incoming requests
         self.target_piece = None  # Piece from peer we are currently requesting, is an int index.
         self.last_received = None  # Time of last message received from peer
@@ -108,7 +108,7 @@ class Peer:
         self.can_send_bitfield = False  # client checks and handles sending bitfields
         self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = sock  # Value is None when this peer is disconnected.
-        self.disconnect_count = 0 # never gets reset, currently
+        self.disconnect_count = 0  # never gets reset, currently
 
         # recv_messages rework
         self.msg_buffer = None
@@ -156,7 +156,7 @@ class Peer:
             self.socket.close()
 
         # reset most parameters, maybe have to add some
-        self.outgoing_requests = []  # reset list, we don't expect requests to be fulfilled
+        self.outgoing_requests = set()  # reset list, we don't expect requests to be fulfilled
         self.incoming_requests = []
         self.socket = None
         self.tcp_established = False
@@ -227,7 +227,6 @@ class Peer:
                     return Status.SUCCESS
                 self.msg_len = msg_len
                 self.msg_buffer = bytearray(msg_len)
-                
 
             while self.loaded_bytes < self.msg_len:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
@@ -243,8 +242,8 @@ class Peer:
                     logger.debug(f"connection closed, disconnecting")
                     self.disconnect()
                     return Status.FAILURE
-                
-                self.msg_buffer[self.loaded_bytes:self.loaded_bytes + len(section)] = section
+
+                self.msg_buffer[self.loaded_bytes : self.loaded_bytes + len(section)] = section
                 self.loaded_bytes += len(section)
 
             # message is ready to be consumed
@@ -301,7 +300,6 @@ class Peer:
                 self.connection_attempts = 0
                 self.consume_message()
         return Status.SUCCESS
-
 
     def consume_message(self):
         self.msg_len = None
@@ -388,7 +386,7 @@ class Peer:
     def send_request(self, index, offset, length):
         """also takes care of the outgoing requests list"""
         msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
-        self.outgoing_requests.append((index, offset, length))
+        self.outgoing_requests.add((index, offset, length))
         return self.send_msg(msg)
 
     def send_piece(self, index, offset, data):
@@ -408,7 +406,7 @@ class Peer:
         if tup in self.outgoing_requests:
             msg = struct.pack(f"!IBIII", 13, MessageType.CANCEL.value, index, offset, length)
             flag = self.send_msg(msg)
-            if flag == Status.SUCCESS: 
+            if flag == Status.SUCCESS:
                 self.outgoing_requests.remove(tup)
                 return Status.SUCCESS
         return Status.FAILURE
@@ -481,4 +479,4 @@ class Peer:
             socket_string = f"host_port: {self.socket.getsockname()[1]}, peer_addr: {str(self.addr[0])}:{str(self.addr[1])}"
         else:
             socket_string = "None"
-        return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}, disconnect_count: {self.disconnect_count:>4}, target_piece: {self.target_piece}, peer_choking: {self.peer_choking}, requests: {self.outgoing_requests}"
+        return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}, disconnect_count: {self.disconnect_count:>4}, target_piece: {self.target_piece}, peer_choking: {self.peer_choking}, requests({len(self.outgoing_requests)}): {self.outgoing_requests}"

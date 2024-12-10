@@ -9,7 +9,7 @@ from ..config import (
     MAX_CONNECTION_ATTEMPTS,
 )
 from .tracker import Tracker
-from .strategy import Strategy
+from .strategy import Strategy, RarestFirstStrategy, PropShareStrategy
 from .file import File
 from .piece import Piece
 import bencoder
@@ -35,7 +35,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file: str, destination: str = ".", port: int = BITTORRENT_PORT):
+    def __init__(self, torrent_file: str, destination: str = ".", strategy = Strategy, port: int = BITTORRENT_PORT):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
@@ -46,6 +46,7 @@ class Client:
         self.peer_id = Client.generate_id()
         self.destination = destination
         self.load_torrent_file(torrent_file)
+        self.strategy = strategy()
         # Register signal handlers
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -57,8 +58,6 @@ class Client:
         try:
             with open(torrent_file, "rb") as f:
                 torrent_data = bencoder.bdecode(f.read())
-                # logger.debug(f"Torrent '{torrent_file}' decoded:")
-                # logger.debug(torrent_data)
         except Exception as e:
             print(f"Error: Could not decode torrent file '{torrent_file}'!")
             print(e)
@@ -115,7 +114,6 @@ class Client:
         """
         self.open_socket()
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
-        self.strategy = Strategy()
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
         track_while_loop_delta = datetime.now()
@@ -202,7 +200,7 @@ class Client:
 
     def add_peers(self):
         # Start establishment of connections to peers
-        additional_peers = self.strategy.determine_additional_peers(self.file, self.peers)
+        additional_peers = self.strategy.determine_additional_peers(self.file, self.connected_peers())
         if additional_peers > 0:
             # Check if we know of any peers that aren't connected
             not_connected = [peer for peer in self.peers if peer.socket is None]
@@ -277,7 +275,7 @@ class Client:
                 num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
                 for req in range(num_requests):
                     offset, length = target_piece_object.get_next_request()
-                    if offset is None or length is None:  # Target piece is complete
+                    if offset is None or length is None:  # Target piece has allocated all block requests.
                         break
                     peer.send_request(peer.target_piece, offset, length)
 

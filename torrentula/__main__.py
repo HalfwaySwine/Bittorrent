@@ -1,5 +1,6 @@
 from .utils.helpers import configure_logging, parse_arguments, validate_arguments
 from .core.client import Client
+from .core.strategy import Strategy, RarestFirstStrategy, PropShareStrategy
 
 
 def main():
@@ -7,7 +8,13 @@ def main():
     validate_arguments(args.torr, args.dest)
     configure_logging(args)
     # Initialize client object which unpacks the torrent file.
-    client = Client(args.torr, args.dest)
+    if args.rarest:
+        strategy = RarestFirstStrategy
+    elif args.propshare:
+        strategy = PropShareStrategy
+    else:
+        strategy = Strategy
+    client = Client(args.torr, args.dest, strategy)
     client.download_torrent()
 
 

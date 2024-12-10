@@ -96,6 +96,17 @@ def parse_arguments():
         action="store_true",
         help="Set logger to info level.",
     )
+    strategy_group = parser.add_mutually_exclusive_group()  # User can select one strategy: rarest, propshare, or basic (default).
+    log_group.add_argument(
+        "--rarest",
+        action="store_true",
+        help="Set strategy to rarest first.",
+    )
+    log_group.add_argument(
+        "--propshare",
+        action="store_true",
+        help="Set strategy to proportional share.",
+    )
     args = parser.parse_args()
     logging.info(f"Parsed arguments: torr={args.torr}, dest={args.dest}")
     return args
