@@ -16,8 +16,9 @@ NUM_RAREST_PIECES = 5  # The number of top rarest pieces to randomly choose from
 MAX_CONNECTION_ATTEMPTS = 10
 
 # Primary performance tuning parameters
-MAX_PEER_OUTSTANDING_REQUESTS = 16
-MAX_CONNECTED_PEERS = 55
+# 40 seems to result in fast downloads
+MAX_PEER_OUTSTANDING_REQUESTS = 40
+MAX_CONNECTED_PEERS = 50
 MIN_CONNECTED_PEERS = 30
 TRACKER_NUMWANT = 80
 PIECE_TIMEOUT_SECS = 3
