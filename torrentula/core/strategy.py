@@ -3,20 +3,13 @@ from random import choice
 from ..config import MIN_CONNECTED_PEERS, MAX_CONNECTED_PEERS, NUM_RAREST_PIECES
 from ..utils.helpers import logger
 
-
-# class StrategyInterface:
-#     def choose_peers(self, peers: list[Peer]) -> list[Peer]:
-#         pass
-#     def assign_pieces(self, remaining_pieces, peers: list[Peer]):
-#         pass
-#     def send_haves(self, completed_pieces, actual_bitfield, peers):
-#         pass
-#     def determine_additional_peers(self, file, connected_peers: list[Peer]):
-#         pass
-
-
-
-
+"""
+Strategy Interface:
+    def choose_peers(self, peers: list[Peer]) -> list[Peer]:
+    def assign_pieces(self, remaining_pieces, peers: list[Peer]):
+    def send_haves(self, completed_pieces, actual_bitfield, peers):
+    def determine_additional_peers(self, file, connected_peers: list[Peer]) -> int:
+"""
 class Strategy():
     def choose_peers(self, peers: list[Peer]) -> list[Peer]:
         """
@@ -30,13 +23,13 @@ class Strategy():
 
     def assign_pieces(self, remaining_pieces, peers: list[Peer]):
         unchoked_peers = [peer for peer in peers if not peer.peer_choking and peer.am_interested and not peer.target_piece]
+        remaining_pieces = list(remaining_pieces)
         if unchoked_peers:
-            remaining_pieces_set = set(remaining_pieces)
             for peer in unchoked_peers:
-                for piece in remaining_pieces_set:
+                while True:
+                    piece = choice(remaining_pieces)
                     if peer.bitfield[piece]:
                         peer.target_piece = piece
-                        remaining_pieces_set.remove(piece)
                         break
 
     def send_haves(self, completed_pieces, actual_bitfield, peers):
@@ -44,7 +37,7 @@ class Strategy():
             for piece in completed_pieces:
                 peer.send_have(piece)
 
-    def determine_additional_peers(self, file, connected_peers: list[Peer]):
+    def determine_additional_peers(self, file, connected_peers: list[Peer]) -> int:
         if len(connected_peers) < MIN_CONNECTED_PEERS:
             return MAX_CONNECTED_PEERS - len(connected_peers)
         else:
@@ -74,17 +67,6 @@ class Strategy():
         return choice(interested) if interested else []
 
 
-class RandomStrategy(Strategy):
-    def assign_pieces(self, remaining_pieces, peers: list[Peer]):
-        unchoked_peers = [peer for peer in peers if not peer.peer_choking and peer.am_interested and not peer.target_piece]
-        if unchoked_peers:
-            remaining_pieces_set = set(remaining_pieces)
-            for peer in unchoked_peers:
-                while True:
-                    piece = choice(remaining_pieces_set)
-                    if peer.bitfield[piece]:
-                        peer.target_piece = piece
-                        break
 class RarestFirstStrategy(Strategy):
     def assign_pieces(self, remaining_pieces, peers: list[Peer]):
         """
