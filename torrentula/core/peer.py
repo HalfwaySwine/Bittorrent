@@ -368,7 +368,7 @@ class Peer:
         return Status.SUCCESS
 
     def receive_messages(self, piece):
-        # try:
+        try:
             status = self.receive_messages_helper(piece)
             while status is Status.SUCCESS:
                 rdy, _, _ = select.select([self.socket], [], [], 0)
@@ -376,10 +376,10 @@ class Peer:
                     break
                 status = self.receive_messages_helper(piece)
             return status
-        # except Exception as e:
-        #     logger.error(f"receive_messages failed with error {repr(e)}, disconnecting")
-        #     self.disconnect()
-        #     return Status.FAILURE
+        except Exception as e:
+            logger.error(f"receive_messages failed with error {repr(e)}, disconnecting")
+            self.disconnect()
+            return Status.FAILURE
 
     def send_keepalive(self):
         msg = struct.pack("!4x")
