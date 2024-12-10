@@ -91,7 +91,6 @@ class Piece:
             if timeSinceRequest > TIME_OUT:
                 logger.debug("Timeout on this request")
                 return True
-            # logger.debug("No timeout on this request")
             return False
 
     # adds block to block data-structure

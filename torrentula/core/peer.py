@@ -465,8 +465,10 @@ class Peer:
             self.send_keepalive()
 
     def establish_new_epoch(self):
+        res = (self.bytes_received, self.bytes_sent)
         self.bytes_received = 0
         self.bytes_sent = 0
+        return res
 
     def disconnect_if_timeout(self):
         if self.socket and datetime.now() - self.last_received > timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
