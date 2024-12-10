@@ -3,9 +3,10 @@ from .block import Block
 import time
 from io import BufferedRandom
 from ..utils.helpers import logger, Status
+from ..config import PIECE_TIMEOUT_SECS
 
 BLOCK_SIZE = 16 * 1024  # standard block size we will request 16kb
-TIME_OUT = 5  # change to what we need it to be later
+TIME_OUT = PIECE_TIMEOUT_SECS
 
 # this class is responsible for holding onto the infomartion assosicated with each piece
 
@@ -38,7 +39,7 @@ class Piece:
     def __init__(self, index, length, hash, torrentLength, torrentPath, fileDesc: BufferedRandom):
         self.index = index  # index of piece
         self.length = length  # length of entire piece (will be different for last piece)
-        self.default_piece_length = length # default piece length for index calculation, we only change self.length after the constructor
+        self.default_piece_length = length  # default piece length for index calculation, we only change self.length after the constructor
         # blocks dictonary only used for reciving data key = offset, value = block class(data,length) however most ask for 16kb
         self.blocks = {}
         self.complete = False  # flag to indicate whether all blocks of the piece are present
@@ -53,30 +54,29 @@ class Piece:
     # gets the next offset and length to ask the peer for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
     def get_next_request(self):
-        logger.debug("attempting to get next request")
         if self.complete:
-            logger.debug("status of Get_next_request(): already complete")
+            logger.debug("Request for a piece already complete.")
             return (None, None)
         if self.length < BLOCK_SIZE:  # if last piece is smaller than the block size
             if 0 not in self.blocks:
                 self.pendingRequests[0] = time.time()
-                logger.debug(f"status of Get_next_request(): 0 {self.length} Last piece is smaller than block")
+                logger.debug(f"Last piece is smaller than block, returning: 0 {self.length}")
                 return (0, self.length)
-            logger.debug("status of Get_next_request(): None None Last piece is smaller than block")
+            logger.debug("Last piece is smaller than block, returning: None None")
             return (None, None)
 
         for offset in range(0, self.length, BLOCK_SIZE):
             if offset not in self.blocks:  # checks whats the next request I have yet to recive
                 if self._check_if_already_asked(offset):  # checks last request time
                     lastLength = self.length - offset
-                    lengthToRetun = BLOCK_SIZE
+                    lengthToReturn = BLOCK_SIZE
                     if lastLength < BLOCK_SIZE:
-                        lengthToRetun = lastLength
+                        lengthToReturn = lastLength
                     # add to pending requests or update time
                     self.pendingRequests[offset] = time.time()
-                    logger.debug(f"status of Get_next_request(): {offset} {lengthToRetun}")
-                    return (offset, lengthToRetun)
-        logger.debug("status of Get_next_request(): None None")
+                    logger.debug(f"Return value: {offset} {lengthToReturn}")
+                    return (offset, lengthToReturn)
+        logger.debug("All requests for this piece are currently allocated to peers.")
         return (None, None)
 
     # checks if its been to long since it requested this block if so needs to re request it (helper fucntion)
