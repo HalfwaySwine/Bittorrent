@@ -403,6 +403,9 @@ class Client:
         seconds = int(time_elapsed % 60)
         # Construct output string
         output = f"Seeding: {self.filename} | "
+        (ip_addr, port) = self.sock.getsockname()
+        output += f"IP: {ip_addr} | "
+        output += f"Port: {port} | "
         output += f"Time: {minutes}:{seconds:02d} | "
         output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
         output += f"Uploaded: {self.file.bytes_uploaded()} | "

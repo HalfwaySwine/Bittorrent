@@ -396,7 +396,6 @@ class Peer:
     def receive_handshake(self):
         pstrlen_bytes = self.socket.recv(1)
         if len(pstrlen_bytes) == 0:
-            # breakpoint()
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
                 logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")

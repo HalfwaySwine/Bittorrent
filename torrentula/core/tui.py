@@ -97,12 +97,18 @@ class Tui:
         # Map completed pieces from bitfield to length of a progress bar
         bitfield = self.client.file.bitfield
         p = len(bitfield)
-        res = [" "] * l
-        SCALE = 0.25
-        THRESHOLD = 0.5 + SCALE * (self.client.file.total_downloaded_percentage() / 100)
-        for i in range(l):
-            j_start = math.floor(i / l * p)
-            j_end = math.ceil((i + 1) / l * p)
-            if sum(bitfield[j_start:j_end]) / (j_end - j_start + 1) > THRESHOLD:
-                res[i] = "#"
+        if l > p: # Handle unusual case when l is greater than length of bitfield
+            res = [" "] * l
+            for i in range(l):
+                if bitfield[math.floor(i / l * p)] == 1:
+                    res[i] = "#"
+        else:
+            res = [" "] * l
+            SCALE = 0.25
+            THRESHOLD = 0.5 + SCALE * (self.client.file.total_downloaded_percentage() / 100)
+            for i in range(l):
+                j_start = math.floor(i / l * p)
+                j_end = math.ceil((i + 1) / l * p)
+                if sum(bitfield[j_start:j_end]) / (j_end - j_start + 1) > THRESHOLD:
+                    res[i] = "#"
         return "".join(res)
