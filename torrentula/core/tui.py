@@ -1,27 +1,19 @@
 import curses
-import time
 from .peer import Peer
-import sys
 from ..utils.helpers import logger
-
-LEFT_INDENT = 2
-
-import curses
-import time
 import math
-from .peer import Peer
-import sys
 
 LEFT_INDENT = 2
+
 
 class Tui:
     def __init__(self, client, stdscr=None):
-        if not stdscr:
+        if not stdscr:  # Occurs when '--tui' command line argument is not provided.
             self.active = False
             return
+
         self.active = True
         self.client = client
-        # self.header_widths = (17, 10, 20, 35, 15, 15, 20, 17, 8, 9)
         self.header_widths = (17, 10, 20, 35, 16, 18, 24, 22, 9, 12)
         self.columns = []
         total = LEFT_INDENT  # Initial indent
@@ -48,6 +40,7 @@ class Tui:
     def update_display(self, win):
         if not self.active:
             return
+        # Gracefully handle insufficiently large terminal.
         if win.getmaxyx()[0] < self.MIN_Y or win.getmaxyx()[1] < self.MIN_X:
             logger.critical("Display requires larger terminal screen size.")
             curses.endwin()
@@ -82,7 +75,6 @@ class Tui:
         row = self.draw_header(win, row)
         max_peers = min(win.getmaxyx()[0] - row - 1, len(peers))
         for i, peer in enumerate(peers[:max_peers]):
-            # breakpoint()
             for col, width in zip(peer, self.columns):
                 win.addstr(row + i, width, "| " + str(col))
             win.addstr(row + i, self.columns[-1] + self.header_widths[-1], " |")

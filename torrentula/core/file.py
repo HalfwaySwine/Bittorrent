@@ -110,7 +110,7 @@ class File:
 
     def __str__(self):
         print("===Overall===")
-        print(f"Progress: {self.bytes_downloaded()} / {self.length} ({self.total_downloaded_percentage:.2f}%)")
+        print(f"Progress: {self.bytes_downloaded()} / {self.length} ({self.total_downloaded_percentage():.2f}%)")
 
         print("===Pieces===")
         for index, piece in enumerate(self.pieces):

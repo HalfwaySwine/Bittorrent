@@ -100,7 +100,7 @@ class Client:
             hashes.append(hash)
         return hashes
 
-    def download_torrent(self, win=None) -> bool:
+    def download_torrent(self, window=None) -> bool:
         """
         Downloads the files from a .torrent file to a specified directory.
 
@@ -118,13 +118,13 @@ class Client:
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
 
-        tui = Tui(self, win)
+        tui = Tui(self, window)
 
         # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
-            if win:
-                tui.update_display(win)
+            if window:
+                tui.update_display(window)
 
             # # only uncomment if you need it, will flood log
             # while_loop_delta_2 = datetime.now()
@@ -137,6 +137,7 @@ class Client:
             self.cleanup_peers()
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
+                breakpoint()
                 if not tui.active:
                     self.repaint_progress()
                 self.send_uninterested()
@@ -217,8 +218,6 @@ class Client:
                     if peer.connect() == Status.SUCCESS:
                         assert False, "Unexpected instantaneous connection success. Review expected behavior of non-blocking sockets and alter code."
 
-            # self.tracker.request_peers(): TODO
-
         # Check for peers that have accepted the connection
         connections_in_progress: list[Peer] = [peer for peer in self.peers if peer.socket is not None and not peer.tcp_established]
         pending_peers = {peer.socket: peer for peer in connections_in_progress}
@@ -239,8 +238,6 @@ class Client:
         """
         Sends messages to peers inform them that we have acquired new pieces.
         """
-        # note: shouldn't we send new pieces only once to each peer?
-        # maybe we should keep track of pieces we already have notified peers of.
         self.strategy.send_haves(completed_pieces, self.file.bitfield, self.connected_peers())
 
     def connected_peers(self):
@@ -251,17 +248,17 @@ class Client:
         Sends data to pieces who are unchoked and have requested data
         """
         for peer in self.peers:
-            if peer.am_choking == False:  # checks if choking
+            if peer.am_choking == False:
                 if len(peer.incoming_requests) > 0:
                     data = peer.incoming_requests[0]
                     dataToSend = self.file.get_data_from_piece(data[1], data[2], data[0])
-                    if dataToSend == 0:  # issue getting data
+                    if dataToSend == 0:  # Issue getting data
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
                     if flag == Status.SUCCESS:
-                        self.file.totalUploaded += data[2]  # update total uploaded
+                        self.file.totalUploaded += data[2]
                         logger.debug(f"Data send back to {peer.addr} successfully")
-                    else:  # failed
+                    else:
                         logger.debug(f"Data failed to send back to {peer.addr}")
 
     def send_keepalives(self):
@@ -347,7 +344,7 @@ class Client:
         return output
 
     def repaint_progress(self):
-        # Calculate upload and download speeds
+        # Calculate very fine-grained upload and download speeds
         # secs_since_last_repaint = time.monotonic() - self.last_interval
         # bytes_downloaded_since_last_repaint = self.file.bytes_downloaded() - self.last_bytes_downloaded
         # bytes_uploaded_since_last_repaint = self.file.bytes_uploaded() - self.last_bytes_uploaded
@@ -369,12 +366,10 @@ class Client:
         time_elapsed = time.monotonic() - self.start_time
         minutes = int(time_elapsed // 60)
         seconds = int(time_elapsed % 60)
-
-        connected_peers: int = len([peer for peer in self.peers if peer.tcp_established])
         # Construct output string
         output = f"File: {self.filename} | "
         output += f"Time: {minutes}:{seconds:02d} | "
-        output += f"Peers: {len(self.peers)} ({connected_peers} connected) | "
+        output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
         output += f"Completed: {self.file.get_progress()} | "
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
@@ -384,19 +379,13 @@ class Client:
         """
         Displays progress report to user.
         """
-        print("=== Client ===")
-        # print(f"Torrent: ", {self.filename}")
-        # print(f"Destination: ", {self.destination}")
-        # print(f"Peer Id: ", {self.peer_id}")
-
-        # Dynamic approach
-        instance_variables = {key: value for key, value in self.__dict__.items() if not callable(value) and not key.startswith("__")}
-        longest_name = max(map(len, instance_variables.keys()))
-        for name, value in instance_variables.items():
-            print(f"{name:<{longest_name}} = {value}")
-
-        self.display_peers()
-        print(self.file)
+        output = ("=== Client ===\n")
+        output += f"Torrent: {self.filename}\n"
+        output += f"Destination: {self.destination}\n"
+        output += f"Peer Id: {self.peer_id}\n"
+        output += self.display_peers()
+        # output += str(self.file)
+        return output
 
     def shutdown(self, signum=None, frame=None):
         """
