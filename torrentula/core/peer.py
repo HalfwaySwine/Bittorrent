@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from ..config import PEER_INACTIVITY_TIMEOUT_SECS
+from ..config import PEER_INACTIVITY_TIMEOUT_SECS, MAX_PEER_OUTSTANDING_REQUESTS
 from ..utils.helpers import logger, Status
 from .piece import Piece
 from .block import Block
@@ -214,29 +214,37 @@ class Peer:
         if self.socket is not None:
             self.socket.close()
 
-        # reset most parameters, maybe have to add some
-        self.outgoing_requests = set()  # reset list, we don't expect requests to be fulfilled
-        self.incoming_requests = []
-        self.socket = None
-        self.tcp_established = False
-        self.sent_handshake = False
-        self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD
-        self.sent_handshake = False
+        # reset all parameters
+        self.bitfield = [0] * self.bitfield_length  # Initialized to all 0 for the length of the torrent
 
+        # Connections start out choked and not interested.
         self.am_interested = False
         self.am_choking = True
         self.peer_interested = False
         self.peer_choking = True
-        self.bitfield = [0] * self.bitfield_length
+
+        # Track statistics *per epoch* to inform strategic decision-making.
         self.bytes_received = 0
         self.bytes_sent = 0
-        self.disconnect_count += 1
-
         self.download_speed = 0
         self.upload_speed = 0
         self.is_seeder = False
+        self.outgoing_requests = set()  # List of pieces that we have requested from the peer but have not completed.
+        self.incoming_requests = []  # list of incoming requests
+        self.target_piece = None  # Piece from peer we are currently requesting, is an int index.
+        self.last_received = None  # Time of last message received from peer
+        self.last_sent = None  # Time of last message sent to peer
 
-        self.consume_message()
+        self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD  # check if we recieved a handshake or not
+        self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
+        self.can_send_bitfield = False  # client checks and handles sending bitfields
+        self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
+        self.socket = None  # Value is None when this peer is disconnected.
+        self.disconnect_count += 1 
+
+        self.msg_len = None
+        self.msg_len_loaded_bytes = 0
+        self.loaded_bytes = 0
 
     def send_handshake(self):
         """
@@ -383,6 +391,10 @@ class Peer:
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.connection_attempts = 0
+                # speedup method, but I don't know why
+                if self.total_bytes_received > 100000:
+                    self.total_bytes_received = 0
+                    self.disconnect()
                 self.consume_message()
 
         return Status.SUCCESS
@@ -474,6 +486,10 @@ class Peer:
     def send_request(self, index, offset, length):
         """also takes care of the outgoing requests list"""
         msg = struct.pack(f"!IBIII", 13, MessageType.REQUEST.value, index, offset, length)
+        # refreshing a large backlog of requests could help download speeds
+        if len(self.outgoing_requests) == MAX_PEER_OUTSTANDING_REQUESTS:
+            self.outgoing_requests = set()
+            logger.error("peer object had large request backlog, refreshing")
         self.outgoing_requests.add((index, offset, length))
         return self.send_msg(msg)
 

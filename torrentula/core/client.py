@@ -279,7 +279,7 @@ class Client:
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
                     if flag == Status.SUCCESS: 
-                        self.file.totalUploaded += data[2] #update total uploaded
+                        self.file.total_uploaded += data[2] #update total uploaded
                         logger.info(f"Data send back to {peer.addr} successfully")
                     else: #failed
                         logger.info(f"Data failed to send back to {peer.addr}")

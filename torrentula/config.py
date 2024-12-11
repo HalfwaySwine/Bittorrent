@@ -16,7 +16,8 @@ MAX_CONNECTION_ATTEMPTS = 10
 
 # Primary performance tuning parameters
 NUM_RAREST_PIECES = 60  # The number of top rarest pieces to randomly choose from.
-MAX_PEER_OUTSTANDING_REQUESTS = 40
+# basically want to stop egregious request backlog
+MAX_PEER_OUTSTANDING_REQUESTS = 100
 MAX_CONNECTED_PEERS = 55
 MIN_CONNECTED_PEERS = 30
 TRACKER_NUMWANT = 80

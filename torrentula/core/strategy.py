@@ -22,15 +22,33 @@ class Strategy():
         return top_four + optimistic_unchoke
 
     def assign_pieces(self, remaining_pieces, peers: list[Peer]):
-        unchoked_peers = [peer for peer in peers if not peer.peer_choking and peer.am_interested and not peer.target_piece]
-        remaining_pieces = list(remaining_pieces)
-        if unchoked_peers:
-            for peer in unchoked_peers:
-                while True:
-                    piece = choice(remaining_pieces)
+        # set comprehension
+        unchoked_peers = {peer for peer in peers if not peer.peer_choking and peer.am_interested and not peer.target_piece}
+        remaining_pieces_copy = set(remaining_pieces)
+        i = 0
+        while unchoked_peers:
+            i += 1
+            # if we can't assign a piece to a peer at all
+            if i == 1000:
+                break
+            if remaining_pieces_copy:
+                piece = choice(list(remaining_pieces_copy))
+                for peer in unchoked_peers:
                     if peer.bitfield[piece]:
                         peer.target_piece = piece
+                        unchoked_peers.remove(peer)
                         break
+                # if no peers take it we have to move on as well
+                remaining_pieces_copy.remove(piece)
+            else:
+                remaining_pieces_copy = set(remaining_pieces)
+
+    def shuffle_pieces(self, remaining_pieces, peers: list[Peer]):
+        """Shuffles piece assignments, may be useful in some cases but not called currently"""
+        # set comprehension
+        all_peers = {peer for peer in peers if not peer.peer_choking and peer.am_interested}
+        for peer in all_peers:
+            peer.target_piece = None
 
     def send_haves(self, completed_pieces, actual_bitfield, peers):
         for peer in peers:
@@ -115,3 +133,15 @@ class RarestFirstStrategy(Strategy):
 
 class PropShareStrategy(Strategy):
     pass
+
+class RandomStrategy(Strategy):
+    def assign_pieces(self, remaining_pieces, peers: list[Peer]):
+        unchoked_peers = {peer for peer in peers if not peer.peer_choking and peer.am_interested and not peer.target_piece}
+        remaining_pieces = list(remaining_pieces)
+        if unchoked_peers:
+            for peer in unchoked_peers:
+                while True:
+                    piece = choice(remaining_pieces)
+                    if peer.bitfield[piece]:
+                        peer.target_piece = piece
+                        break
