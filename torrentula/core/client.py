@@ -304,7 +304,7 @@ class Client:
                 num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
                 for req in range(num_requests):
                     offset, length = target_piece_object.get_next_request()
-                    if offset is None or length is None:  # Target piece has allocated all block requests.
+                    if offset is None or length is None or peer.target_piece is None:  # Target piece has allocated all block requests.
                         break
                     peer.send_request(peer.target_piece, offset, length)
 
