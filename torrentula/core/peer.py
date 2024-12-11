@@ -499,6 +499,7 @@ class Peer:
         """sends data, passed in as bytes, as well as the index and offset of it
         also takes care of the incoming requests list, if it wasn't in there, fail"""
         tup = (index, offset, len(data))
+        self.bytes_sent += len(data)
         if tup in self.incoming_requests:
             msg_len = len(data) + 9
             msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)

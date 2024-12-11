@@ -294,9 +294,9 @@ class Client:
                     flag = peer.send_piece(data[0], data[1], dataToSend)
                     if flag == Status.SUCCESS:
                         self.file.total_uploaded += data[2]  # update total uploaded
-                        logger.info(f"Data send back to {peer.addr} successfully")
+                        logger.debug(f"Data send back to {peer.addr} successfully")
                     else:  # failed
-                        logger.info(f"Data failed to send back to {peer.addr}")
+                        logger.debug(f"Data failed to send back to {peer.addr}")
 
     def send_keepalives(self):
         for peer in self.peers:
