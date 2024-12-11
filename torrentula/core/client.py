@@ -118,8 +118,7 @@ class Client:
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
 
-        if win:
-            tui = Tui(self, win)
+        tui = Tui(self, win)
 
         # track_while_loop_delta = datetime.now()
         # Main event loop
@@ -138,7 +137,8 @@ class Client:
             self.cleanup_peers()
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
-                self.repaint_progress()
+                if not tui.active:
+                    self.repaint_progress()
                 self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
