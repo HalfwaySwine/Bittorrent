@@ -29,7 +29,7 @@ from urllib.parse import quote_plus
 from pathlib import Path
 from .peer import Peer, Handshake
 import errno
-
+import math
 
 class Client:
     """
@@ -316,6 +316,15 @@ class Client:
                 sockets_to_peers[socket].receive_messages(target_piece)
             else:
                 sockets_to_peers[socket].receive_messages(None)
+            if sockets_to_peers[socket].can_send_bitfield:
+                bitfield_list = self.file.bitfield
+                bitfield = bytearray(math.ceil(len(self.file.bitfield) / 8))
+                for i in range(len(bitfield_list)):
+                    byte_index = i // 8
+                    index_in_byte = i % 8
+                    if bitfield_list[i] == 1:
+                        bitfield[byte_index] = bitfield[byte_index] | 1 << (7 - index_in_byte)
+                sockets_to_peers[socket].send_bitfield(bitfield)
 
     def cleanup_peers(self):
         check_liveness = [peer for peer in self.peers if peer.tcp_established]

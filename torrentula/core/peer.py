@@ -21,6 +21,7 @@ class MessageType(Enum):
     PIECE = 7
     CANCEL = 8
     PORT = 9
+    HAVE_ALL = 14
 
 
 class Handshake(Enum):
@@ -370,6 +371,8 @@ class Peer:
                         self.incoming_requests.remove(tup)
                 elif msg_type == MessageType.PORT.value:
                     pass
+                elif msg_type == MessageType.HAVE_ALL.value:
+                    self.bitfield = [1] * self.bitfield_length
                 else:
                     logger.error(f"we got a weird type: {msg_type}")
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
@@ -387,19 +390,19 @@ class Peer:
 
     def receive_handshake(self):
         pstrlen_bytes = self.socket.recv(1)
-        if len(pstrlen_bytes) == 0:  # No bytes read, but caller believed socket to be readable.
+        if len(pstrlen_bytes) == 0:
             # breakpoint()
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
                 logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
-            # downgrade from error, this happens very often
-            logger.info(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
+            # downgrade from error, this happens very often 
+            logger.error(f"{self.addr} disconnected from us. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
 
         pstrlen = int.from_bytes(pstrlen_bytes)
         bytes = self.socket.recv(pstrlen + 48)
-        if len(bytes) == 0:
+        if len(bytes) != pstrlen + 48:
             logger.error(f"Expected {pstrlen} bytes from peer at {self.addr} and got {len(bytes)}. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
@@ -409,6 +412,7 @@ class Peer:
         # may want to do smth with pstr, padding, and peer_id
         # but rn I only care about checking info_hash
         if info_hash != self.info_hash:
+            logger.error(f"info hash doesn't match up, failed")
             self.disconnect()
             return Status.FAILURE
         self.received_handshake = Handshake.CAN_RECV_BITFIELD
