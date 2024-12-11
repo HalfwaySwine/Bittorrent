@@ -176,6 +176,8 @@ class Peer:
 
         # if we pass in a socket we are already connected, send handshake
         if sock is not None:
+            self.last_sent = datetime.now()
+            self.last_received = datetime.now()
             self.record_tcp_established()
             # may be unnecessary since I imagine peer will send handshake and trigger in recieve_messages()
             self.send_handshake()
@@ -232,8 +234,6 @@ class Peer:
         self.outgoing_requests = set()  # List of pieces that we have requested from the peer but have not completed.
         self.incoming_requests = []  # list of incoming requests
         self.target_piece = None  # Piece from peer we are currently requesting, is an int index.
-        self.last_received = None  # Time of last message received from peer
-        self.last_sent = None  # Time of last message sent to peer
 
         self.received_handshake = Handshake.HANDSHAKE_NOT_RECVD  # check if we recieved a handshake or not
         self.sent_handshake = False  # needed to differentiate if we initiate or they initiate connection
