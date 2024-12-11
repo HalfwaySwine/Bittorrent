@@ -403,7 +403,8 @@ class Client:
         seconds = int(time_elapsed % 60)
         # Construct output string
         output = f"Seeding: {self.filename} | "
-        (ip_addr, port) = self.sock.getsockname()
+        # ip_addr, port = self.sock.getsockname()
+        ip_addr, port = self.tracker.external_ip, self.tracker.externPort
         output += f"IP: {ip_addr} | "
         output += f"Port: {port} | "
         output += f"Time: {minutes}:{seconds:02d} | "
