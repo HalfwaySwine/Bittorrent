@@ -3,12 +3,12 @@ import socket
 from urllib.parse import urlparse, urlencode, quote_plus, unquote_plus, quote
 import bencoder
 from .peer import Peer
-from ..config import HTTP_PORT, TRACKER_NUMWANT
+from ..config import HTTP_PORT, TRACKER_NUMWANT, BITTORRENT_PORT
 import sys
 from struct import unpack
 import select
 from datetime import datetime, timedelta
-
+import pynat
 
 class Tracker:
     """
@@ -26,6 +26,8 @@ class Tracker:
         self.num_pieces = num_pieces
         self.interval = 0
         self.request_in_progress = False
+        self.externIP = None
+        self.externPort = None
 
     def join_swarm(self, bytes_left, port) -> list[Peer]:
         """
@@ -41,14 +43,17 @@ class Tracker:
         if datetime.now() - self.timestamp < timedelta(seconds=self.interval):
             logger.info("Sent Tracker request too soon :(")
             return
+        #self.setup_upnp()
+        self.setup_nat_pmp()
         params = {
             "peer_id": self.peer_id,
-            "port": port,
+            "port": self.externPort,
             "uploaded": uploaded,
             "downloaded": downloaded,
             "left": left,
             "numwant": TRACKER_NUMWANT,
             "event": event,
+            "ip": self.external_ip 
         }
         parsed_url = urlparse(self.url)
         host = parsed_url.hostname
@@ -65,6 +70,22 @@ class Tracker:
         self.sock.sendall(request.encode())
         self.timestamp = datetime.now()
         self.request_in_progress = True
+
+    def setup_nat_pmp(self):
+        """
+        Gets a external ip and port to map to 
+        """
+        try:
+            nat_type, external_ip, external_port = pynat.get_ip_info() #no built in timeout
+            if nat_type:
+                self.external_ip = external_ip 
+                self.externPort = external_port
+                logger.info(f"NAT Type: {nat_type}, external IP: {self.external_ip}, port: {external_port}")
+                return True
+        except Exception as e:
+            logger.info(f"Failed to set up NAT-PMP: {e}")
+            self.external_ip = None
+            return False
 
     def recv_tracker_response(self, block=0):
         if self.request_in_progress == True:

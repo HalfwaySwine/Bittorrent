@@ -143,7 +143,7 @@ class Client:
                 self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
-            # self.send_requests_reponses_back()
+            self.send_requests_reponses_back()
             self.send_keepalives()
             self.send_interested()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
@@ -276,11 +276,11 @@ class Client:
                     if dataToSend == 0:  # Issue getting data
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
-                    if flag == Status.SUCCESS:
-                        self.file.total_uploaded += data[2]
-                        logger.debug(f"Data send back to {peer.addr} successfully")
-                    else:
-                        logger.debug(f"Data failed to send back to {peer.addr}")
+                    if flag == Status.SUCCESS: 
+                        self.file.totalUploaded += data[2] #update total uploaded
+                        logger.info(f"Data send back to {peer.addr} successfully")
+                    else: #failed
+                        logger.info(f"Data failed to send back to {peer.addr}")
 
     def send_keepalives(self):
         for peer in self.peers:
