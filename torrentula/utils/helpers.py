@@ -80,6 +80,11 @@ def parse_arguments():
         help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
     )
     parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="View download progress in a textual user interface.",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -97,12 +102,12 @@ def parse_arguments():
         help="Set logger to info level.",
     )
     strategy_group = parser.add_mutually_exclusive_group()  # User can select one strategy: rarest, propshare, or basic (default).
-    log_group.add_argument(
+    strategy_group.add_argument(
         "--rarest",
         action="store_true",
         help="Set strategy to rarest first.",
     )
-    log_group.add_argument(
+    strategy_group.add_argument(
         "--propshare",
         action="store_true",
         help="Set strategy to proportional share.",

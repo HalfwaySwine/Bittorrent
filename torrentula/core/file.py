@@ -7,12 +7,14 @@ from ..utils.helpers import logger
 
 
 class File:
-    def __init__(self, name, destination, length, piece_length, hashes):
+    def __init__(self, name, destination, length, piece_length, hashes, clean=False):
         self.piece_length = piece_length
         self.name = name
         self.destination = destination
         self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
+        if clean:
+            self.remove_artifacts()
         self.length = length
         self.initialize_file()
         self.totalUploaded = 0  # in bytes
@@ -22,6 +24,12 @@ class File:
         logger.debug(f"File - last piece length {length - (len(self.pieces) - 1) * piece_length}")
         self.bitfield: list[int] = self.load_bitfield_from_disk()
         self.initialize_missing_pieces()
+
+    def remove_artifacts(self):
+        for path in [self.bitfield_path, self.torrent_path]:
+            if os.path.exists(path):
+                os.remove(path)
+                logger.info(f"Running with '--clean' argument: removed file '{path}'")
 
     def initialize_file(self):
         if os.path.exists(self.torrent_path):  # Open existing file without overwriting
@@ -182,14 +190,13 @@ class File:
             total += piece.downloaded
         logger.debug(f"{total} bytes downloaded (based on unverified data)")
         return total
-    
+
     def get_data_from_piece(self, offset, length, index):
-        for i, piece in enumerate(self.pieces): 
+        for i, piece in enumerate(self.pieces):
             if i == index:
                 data = piece.get_data_from_file(offset, length)
                 return data
         return 0
-
 
     def rename(self, new):
         """Renames the file. Used when the download is complete to remove the temporary suffix."""

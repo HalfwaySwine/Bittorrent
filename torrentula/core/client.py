@@ -36,7 +36,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file: str, destination: str = ".", strategy = Strategy, port: int = BITTORRENT_PORT):
+    def __init__(self, torrent_file: str, destination: str = ".", strategy=Strategy, clean=False, port: int = BITTORRENT_PORT):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
@@ -46,13 +46,13 @@ class Client:
         self.port = port
         self.peer_id = Client.generate_id()
         self.destination = destination
-        self.load_torrent_file(torrent_file)
+        self.load_torrent_file(torrent_file, clean)
         self.strategy = strategy()
         # Register signal handlers
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
-    def load_torrent_file(self, torrent_file):
+    def load_torrent_file(self, torrent_file, clean):
         """
         Decodes and extracts information for a given '.torrent' file.
         """
@@ -77,7 +77,7 @@ class Client:
         assert last_piece_size <= piece_length, "Error: Last piece is larger than piece size."
         calc_size_total = ((len(hashes) - 1) * piece_length) + last_piece_size
         assert calc_size_total == self.length, "Error: Torrent length, piece length and hashes do not match!"
-        self.file = File(self.filename, self.destination, self.length, piece_length, hashes)
+        self.file = File(self.filename, self.destination, self.length, piece_length, hashes, clean)
         # Initialize variables for upload/download tracking statistics.
         # self.last_bytes_downloaded = self.file.bytes_downloaded()
         # self.last_bytes_uploaded = self.file.bytes_uploaded()
@@ -117,7 +117,7 @@ class Client:
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
-        
+
         if win:
             tui = Tui(self, win)
 
@@ -131,7 +131,7 @@ class Client:
             # while_loop_delta_2 = datetime.now()
             # logger.error(f"Time of while loop: {while_loop_delta_2 - track_while_loop_delta}")
             # track_while_loop_delta = while_loop_delta_2
-            
+
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
@@ -142,7 +142,7 @@ class Client:
                 self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
-            #self.send_requests_reponses_back()
+            # self.send_requests_reponses_back()
             self.send_keepalives()
             self.send_interested()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
@@ -250,18 +250,18 @@ class Client:
         """
         Sends data to pieces who are unchoked and have requested data
         """
-        for peer in self.peers: 
-            if peer.am_choking == False: #checks if choking
-                if len(peer.incoming_requests) > 0: 
+        for peer in self.peers:
+            if peer.am_choking == False:  # checks if choking
+                if len(peer.incoming_requests) > 0:
                     data = peer.incoming_requests[0]
                     dataToSend = self.file.get_data_from_piece(data[1], data[2], data[0])
-                    if dataToSend == 0: #issue getting data 
+                    if dataToSend == 0:  # issue getting data
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
-                    if flag == Status.SUCCESS: 
-                        self.file.totalUploaded += data[2] #update total uploaded
+                    if flag == Status.SUCCESS:
+                        self.file.totalUploaded += data[2]  # update total uploaded
                         logger.debug(f"Data send back to {peer.addr} successfully")
-                    else: #failed
+                    else:  # failed
                         logger.debug(f"Data failed to send back to {peer.addr}")
 
     def send_keepalives(self):
@@ -356,7 +356,7 @@ class Client:
         # self.last_bytes_uploaded = self.file.bytes_uploaded()
 
     def progress(self):
-            # Calculate time elapsed
+        # Calculate time elapsed
         time_elapsed = time.monotonic() - self.start_time
         minutes = int(time_elapsed // 60)
         seconds = int(time_elapsed % 60)
@@ -370,7 +370,7 @@ class Client:
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
         return output
-    
+
     def __str__(self):
         """
         Displays progress report to user.
