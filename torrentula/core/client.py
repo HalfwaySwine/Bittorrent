@@ -301,7 +301,7 @@ class Client:
                 for tup in set(peer.outgoing_requests):
                     peer.send_cancel(tup[0], tup[1], tup[2])
             else:
-                num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
+                num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.outgoing_requests)
                 for req in range(num_requests):
                     offset, length = target_piece_object.get_next_request()
                     if offset is None or length is None or peer.target_piece is None:  # Target piece has allocated all block requests.

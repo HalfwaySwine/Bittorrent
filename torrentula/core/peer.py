@@ -396,6 +396,7 @@ class Peer:
                 if self.total_bytes_received > 100000:
                     self.total_bytes_received = 0
                     self.disconnect()
+                    return Status.FAILURE
                 self.consume_message()
 
         return Status.SUCCESS
