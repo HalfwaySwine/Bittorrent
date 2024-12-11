@@ -37,7 +37,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file: str, destination: str = ".", strategy=Strategy, clean=False, port: int = BITTORRENT_PORT):
+    def __init__(self, torrent_file: str, destination: str = ".", strategy=Strategy, clean=False, port: int = BITTORRENT_PORT, nat = False):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
@@ -47,6 +47,7 @@ class Client:
         self.port = port
         self.peer_id = Client.generate_id()
         self.destination = destination
+        self.nat = nat
         self.load_torrent_file(torrent_file, clean)
         self.strategy = strategy()
         # Register signal handlers
@@ -68,7 +69,7 @@ class Client:
         self.announce_url = torrent_data[b"announce"].decode()
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
-        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(hashes))
+        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(hashes), self.nat)
         # Extracts file metadata from torrent file and sets up the File class.
         self.filename: str = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
@@ -165,7 +166,7 @@ class Client:
         """
         self.open_socket()
         self.file.seed_file()
-        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield))
+        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield), self.nat)
         self.peers = self.tracker.join_swarm(0, self.port)
         while True:  # Seed indefinitely, until signal is received and hopefully caught.
             if self.tui.active:
@@ -184,6 +185,7 @@ class Client:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         host = "0.0.0.0"  # Listen on all interfaces
+        assert self.port
         self.sock.bind((host, self.port))
         self.sock.listen(MAX_CONNECTED_PEERS)
         logger.info(f"Listening for connections on {host}:{self.port}...")
@@ -403,8 +405,11 @@ class Client:
         seconds = int(time_elapsed % 60)
         # Construct output string
         output = f"Seeding: {self.filename} | "
-        # ip_addr, port = self.sock.getsockname()
-        ip_addr, port = self.tracker.external_ip, self.tracker.externPort
+        
+        if self.nat:
+            ip_addr, port = self.tracker.external_ip, self.tracker.externPort
+        else:
+            ip_addr, port = self.sock.getsockname()
         output += f"IP: {ip_addr} | "
         output += f"Port: {port} | "
         output += f"Time: {minutes}:{seconds:02d} | "

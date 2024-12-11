@@ -15,7 +15,7 @@ def main():
     else:
         strategy = Strategy
     
-    client = Client(args.torr, args.dest, strategy, args.clean)
+    client = Client(args.torr, args.dest, strategy, args.clean, args.port, args.nat)
     if args.tui:
         import curses
         curses.wrapper(client.download_torrent)

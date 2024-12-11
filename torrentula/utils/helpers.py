@@ -2,7 +2,7 @@ import logging
 import argparse
 import os
 import sys
-from ..config import LOG_FILENAME, LOG_DIRECTORY
+from ..config import LOG_FILENAME, LOG_DIRECTORY, BITTORRENT_PORT
 
 logger = logging.getLogger(LOG_FILENAME)
 
@@ -75,12 +75,27 @@ def parse_arguments():
         help="The relative path of the destination directory where the downloaded file will be saved (default: current directory).",
     )
     parser.add_argument(
+        "--port",
+        "-p",
+        type=int,
+        default=BITTORRENT_PORT,
+        help="The port that the client will listen for incoming connections on.",
+    )
+    parser.add_argument(
+        "--nat",
+        "-n",
+        action="store_true",
+        help="Request a public IP and port for NAT traversal.",
+    )
+    parser.add_argument(
         "--clean",
+        "-c",
         action="store_true",
         help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
     )
     parser.add_argument(
         "--seed",
+        "-s",
         action="store_true",
         help="Seed the torrent file after acquiring the complete file.",
     )

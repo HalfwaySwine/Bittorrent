@@ -10,12 +10,13 @@ import select
 from datetime import datetime, timedelta
 import pynat
 
+
 class Tracker:
     """
     Server managing swarm associated with a torrent. A client can join the swarm by sending a request to this server using its associated url or IP address.
     """
 
-    def __init__(self, url, peer_id, info_hash, num_pieces):
+    def __init__(self, url, peer_id, info_hash, num_pieces, nat=False):
         self.url = url
         self.timestamp = datetime.now()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -28,6 +29,7 @@ class Tracker:
         self.request_in_progress = False
         self.externIP = None
         self.externPort = None
+        self.nat = nat
 
     def join_swarm(self, bytes_left, port) -> list[Peer]:
         """
@@ -43,18 +45,21 @@ class Tracker:
         if datetime.now() - self.timestamp < timedelta(seconds=self.interval):
             logger.info("Sent Tracker request too soon :(")
             return
-        #self.setup_upnp()
-        self.setup_nat_pmp()
         params = {
             "peer_id": self.peer_id,
-            "port": self.externPort,
+            "port": port,
             "uploaded": uploaded,
             "downloaded": downloaded,
             "left": left,
             "numwant": TRACKER_NUMWANT,
             "event": event,
-            "ip": self.external_ip 
         }
+        if self.nat:
+            # self.setup_upnp()
+            self.setup_nat_pmp()
+            params["ip"] = self.external_ip
+            params["port"] = self.externPort
+
         parsed_url = urlparse(self.url)
         host = parsed_url.hostname
         port = parsed_url.port
@@ -73,12 +78,12 @@ class Tracker:
 
     def setup_nat_pmp(self):
         """
-        Gets a external ip and port to map to 
+        Gets a external ip and port to map to
         """
         try:
-            nat_type, external_ip, external_port = pynat.get_ip_info() #no built in timeout
+            nat_type, external_ip, external_port = pynat.get_ip_info()  # no built in timeout
             if nat_type:
-                self.external_ip = external_ip 
+                self.external_ip = external_ip
                 self.externPort = external_port
                 logger.info(f"NAT Type: {nat_type}, external IP: {self.external_ip}, port: {external_port}")
                 return True
