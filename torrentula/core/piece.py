@@ -51,6 +51,10 @@ class Piece:
         self.torrentPath = torrentPath
         self.fileDesc = fileDesc  # file to write to
 
+        # endgame mode stuff
+        self.endgame_mode = False
+        self.endgame_mode_offsets = set(range(0, self.length, BLOCK_SIZE))
+
     # gets the next offset and length to ask the peer for a specified client this is on the assumtion that we will always ask for 16kb incriments which is standard
     # return a tuple (offset to request, length to request)
     def get_next_request(self):
@@ -76,6 +80,23 @@ class Piece:
                     self.pendingRequests[offset] = time.time()
                     logger.debug(f"Return value: {offset} {lengthToReturn}")
                     return (offset, lengthToReturn)
+        
+        # in endgame mode we ignore already asked limitations
+        if self.endgame_mode:
+            # reset set if empty with unfulfilled blocks
+            if not self.endgame_mode_offsets:
+                self.endgame_mode_offsets = set(range(0, self.length, BLOCK_SIZE)) - set(self.blocks.keys())
+
+            offset = self.endgame_mode_offsets.pop()
+            lastLength = self.length - offset
+            lengthToReturn = BLOCK_SIZE
+            if lastLength < BLOCK_SIZE:
+                lengthToReturn = lastLength
+            # add to pending requests or update time
+            self.pendingRequests[offset] = time.time()
+            logger.debug(f"Return value: {offset} {lengthToReturn}")
+            return (offset, lengthToReturn)
+
         logger.debug("All requests for this piece are currently allocated to peers.")
         return (None, None)
 
@@ -96,6 +117,9 @@ class Piece:
     # adds block to block data-structure
     # returns -1 if invalid hash (need to restart), 1 if added block successfully but not complete yet, 0 if added block and complete and done
     def add_block(self, offset, data):
+        # if we already have the block return -2
+        if offset in self.blocks:
+            return -2
         logger.debug("Attempting to add block")
         blocktoAdd = Block(len(data), data)
         self.blocks[offset] = blocktoAdd

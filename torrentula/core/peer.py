@@ -362,7 +362,7 @@ class Peer:
                     self.incoming_requests.append((index, offset, length))
                 elif msg_type == MessageType.PIECE.value:
                     # if we passed in a piece that is not none
-                    if piece:
+                    if piece and not piece.complete:
                         # will get the block and add it to the piece
                         # 8 bytes after is info
                         info = self.msg_buffer[1:9]
@@ -373,8 +373,8 @@ class Peer:
                         tup = (index, offset, length)
                         if tup in self.outgoing_requests:
                             self.outgoing_requests.remove(tup)
-                            piece.add_block(offset, self.msg_buffer[9 : self.msg_len])
-                            self.bytes_received += length
+                            if piece.add_block(offset, self.msg_buffer[9 : self.msg_len]) >= 0:
+                                self.bytes_received += length
                 elif msg_type == MessageType.CANCEL.value:
                     info = self.msg_buffer[1 : self.msg_len]
                     index, offset, length = struct.unpack(f"!III", info)
@@ -392,6 +392,7 @@ class Peer:
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.connection_attempts = 0
                 # speedup method, but I don't know why
+                # according to chatgpt: Seeders maintain limited upload slots, so if you're not prioritized, reconnecting can sometimes reset the priority dynamics.
                 if self.total_bytes_received > 100000:
                     self.total_bytes_received = 0
                     self.disconnect()
@@ -562,7 +563,8 @@ class Peer:
         return self.send_msg(msg)
 
     def send_keepalive_if_needed(self):
-        if not self.tcp_established or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+        # we should send if half the disconnect time has elapsed probably
+        if not self.tcp_established or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS) / 2:
             return  # Keepalive is not necessary
         else:
             self.send_keepalive()

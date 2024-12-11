@@ -2,7 +2,7 @@ from .piece import Piece
 from math import ceil
 from pathlib import Path
 import os
-from ..config import BITFIELD_FILE_SUFFIX, IN_PROGRESS_FILENAME_SUFFIX
+from ..config import BITFIELD_FILE_SUFFIX, IN_PROGRESS_FILENAME_SUFFIX, ENDGAME_CUTOFF_PERCENT
 from ..utils.helpers import logger
 
 
@@ -22,6 +22,7 @@ class File:
         self.initialize_pieces()
         self.bitfield: list[int] = self.load_bitfield_from_disk()
         self.initialize_missing_pieces()
+        self.endgame_mode = False
 
     def initialize_pieces(self):
         logger.debug("Initializing pieces...")
@@ -116,6 +117,12 @@ class File:
             logger.info(
                 f"{self.total_downloaded_percentage():.2f}% downloaded (verified), {self.total_downloaded_unverified_percentage():.2f}% downloaded (unverified)"
             )
+        # set all pieces to endgame mode
+        if self.total_downloaded_percentage() > ENDGAME_CUTOFF_PERCENT and not self.endgame_mode:
+            self.endgame_mode = True
+            for piece in self.pieces:
+                piece.endgame_mode = True
+
         return newly_completed
 
     def get_progress(self):

@@ -295,8 +295,11 @@ class Client:
         for peer in available_peers:
             # Reset target_piece if completed already.
             target_piece_object: Piece = self.file.pieces[peer.target_piece]
+            # send cancels, our previous requests should all be useless here
             if target_piece_object.complete:
                 peer.target_piece = None
+                for tup in set(peer.outgoing_requests):
+                    peer.send_cancel(tup[0], tup[1], tup[2])
             else:
                 num_requests = MAX_PEER_OUTSTANDING_REQUESTS - len(peer.incoming_requests)
                 for req in range(num_requests):
