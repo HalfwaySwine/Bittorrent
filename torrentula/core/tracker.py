@@ -9,18 +9,8 @@ from struct import unpack, pack
 import select
 from datetime import datetime, timedelta
 import random
+import ssl
 
-udp = True
-#udp://tracker.torrent.eu.org:451/
-UDP_HOST = "tracker.torrent.eu.org"
-UDP_PORT = 451
-#udp://tracker1.bt.moack.co.kr:80
-#udp://tracker.dump.cl:6969
-#udp://tracker.bittor.pw:1337
-#udp://open.demonii.com:1337
-UDP_HOST1 = "tracker.bittor.pw"
-UDP_PORT1 = 1337
-#udp://128.8.126.63:554
 class Tracker:
     """
     Server managing swarm associated with a torrent. A client can join the swarm by sending a request to this server using its associated url or IP address.
@@ -29,7 +19,8 @@ class Tracker:
     def __init__(self, url, peer_id, info_hash, num_pieces):
         self.url = url
         self.timestamp = datetime.now()
-        if udp:
+        type = urlparse(url).scheme
+        if type == "udp":
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         else:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -40,16 +31,17 @@ class Tracker:
         self.num_pieces = num_pieces
         self.interval = 0
         self.request_in_progress = False
+        self.type = type
 
     def join_swarm(self, bytes_left, port) -> list[Peer]:
         """
         Returns: Returns a list of peer objects and sets request interval if successful. Terminates program if there is an error.
         """
-        if udp:
+        if self.type == "http" or self.type == "https":
+            self.send_tracker_request(port, 0, 0, bytes_left, "started")
+        elif self.type == "udp":
             self.send_tracker_connect_request_udp()
-        return self.send_tracker_request(port, 0, 0, bytes_left, "started")
-        # Extract information
-        # Seconds that the client should wait between sending regular requests to the tracker
+            return self.send_tracker_request(port, 0, 0, bytes_left, "started") #did not implement non blocking recv's for udp
         peer_list = self.recv_tracker_response(1)  # blocking recv
         return peer_list
 
@@ -57,29 +49,38 @@ class Tracker:
         if datetime.now() - self.timestamp < timedelta(seconds=self.interval):
             logger.info("Sent Tracker request too soon :(")
             return
-        if udp:
+        parsed_url = urlparse(self.url)
+        host = parsed_url.hostname
+        tracker_port = parsed_url.port
+        path = parsed_url.path
+        if tracker_port == None:
+            tracker_port = 443 if self.type == "HTTPS" else 6969
+        tracker_addr = (host, tracker_port)
+        if self.type == "udp":
+            #construct message
             transaction_id = random.randint(0, 2**32 - 1)
-            print(f"{transaction_id}")
-            action = 1  # 1 for announce
-            event_udp = 0  # 0: none, 1: completed, 2: started, 3: stopped
+            action = 1      # 1 for announce
+            event_udp = 0   # 0: none, 1: completed, 2: started, 3: stopped
             ip_address = 0  # Default
             key = 0
             announce_request = pack(">QII20s20sQQQIIIiH",
                 self.connection_id, action, transaction_id, self.info_hash, self.peer_id.encode(),
                 downloaded, left, uploaded, event_udp, ip_address, key, TRACKER_NUMWANT, port)
-            self.sock.sendto(announce_request, (UDP_HOST, UDP_PORT))
-            response, msg = self.sock.recvfrom(2048)
+            self.sock.sendto(announce_request, (host, tracker_port))
+            #recv tracker response
+            response, _ = self.sock.recvfrom(2048)
             action, received_transaction_id, interval, leechers, seeders = unpack(">IIIII", response[:20])
-            print(f"{action}, {received_transaction_id}, interval: {interval}, leechers: {leechers}, seeders: {seeders}")
+            logger.debug(f"UDP tracker response: {action}, {received_transaction_id}, interval: {interval}, leechers: {leechers}, seeders: {seeders}")
+            self.interval = interval
             peers_data = response[20:]
             peer_list = []
             for i in range(0, len(peers_data), 6):
                 ip_tuple = unpack(">BBBB", peers_data[i:i+4])
                 ip_string = '.'.join(map(str, ip_tuple))
                 port = unpack(">H", peers_data[i+4:i+6])[0]
-                print(f"{ip_string}:{port}")
                 peer_list.append(Peer(ip_string, port, self.info_hash, self.peer_id, self.num_pieces))
             return peer_list
+        #handle http or https trackers
         params = {
             "peer_id": self.peer_id,
             "port": port,
@@ -89,14 +90,11 @@ class Tracker:
             "numwant": TRACKER_NUMWANT,
             "event": event,
         }
-        parsed_url = urlparse(self.url)
-        host = parsed_url.hostname
-        port = parsed_url.port
-        path = parsed_url.path
-        tracker_addr = (host, port)
-        logger.debug(f"Attempting to connect to tracker at {host}:{port} over TCP...")
+        if self.type == "HTTPS":
+            context = ssl.create_default_context()
+            self.sock = context.wrap_socket(self.sock, server_hostname=host)
+        logger.debug(f"Attempting to connect to tracker at {host}:{tracker_port} over TCP...")
         self.sock.connect(tracker_addr)
-
         # Construct get request
         encoded_params = urlencode(params)
         # Construct the HTTP GET request
@@ -198,18 +196,14 @@ class Tracker:
         protocol_id = 0x41727101980
         action = 0 # Connect
         transaction_id = random.randint(0, 2**32 - 1)
-        url ="udp://128.8.126.63:55443" #hardcoding url
         parsed_url = urlparse(self.url)
         host = parsed_url.hostname
         port = parsed_url.port
         path = parsed_url.path
-        print(path)
         request = pack(">QII", protocol_id, action, transaction_id)
-        self.sock.sendto(request, (UDP_HOST, UDP_PORT))
-
+        self.sock.sendto(request, (host, port))
         #receive connect response
         response, _ = self.sock.recvfrom(1024)
         action, received_transaction_id, connection_id = unpack(">IIQ", response)
         assert(transaction_id == received_transaction_id)
         self.connection_id = connection_id
-        print(connection_id)

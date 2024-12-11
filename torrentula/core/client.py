@@ -45,6 +45,7 @@ class Client:
         self.port = port
         self.peer_id = Client.generate_id()
         self.destination = destination
+        self.tracker_pref = "http" #replace with command line arg later
         self.load_torrent_file(torrent_file)
         self.strategy = strategy()
         # Register signal handlers
@@ -64,6 +65,13 @@ class Client:
             sys.exit(1)
         # Extracts announce url from the torrent file and sets up the Tracker class.
         announce_url = torrent_data[b"announce"].decode()
+        #check announce-list for preference, if it doesn't exist, just use default
+        if self.tracker_pref not in  announce_url:
+            if b"announce-list" in torrent_data:
+                tracker_list = torrent_data[b"announce-list"]
+                for i in range(0, len(tracker_list)):
+                    if self.tracker_pref in tracker_list[i][0].decode():
+                        announce_url = tracker_list[i][0].decode()
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
         self.tracker = Tracker(announce_url, self.peer_id, self.info_hash, len(hashes))
@@ -124,7 +132,7 @@ class Client:
             # while_loop_delta_2 = datetime.now()
             # logger.error(f"Time of while loop: {while_loop_delta_2 - track_while_loop_delta}")
             # track_while_loop_delta = while_loop_delta_2
-            
+
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
@@ -243,15 +251,15 @@ class Client:
         """
         Sends data to pieces who are unchoked and have requested data
         """
-        for peer in self.peers: 
+        for peer in self.peers:
             if peer.am_choking == False: #checks if choking
-                if len(peer.incoming_requests) > 0: 
+                if len(peer.incoming_requests) > 0:
                     data = peer.incoming_requests[0]
                     dataToSend = self.file.get_data_from_piece(data[1], data[2], data[0])
-                    if dataToSend == 0: #issue getting data 
+                    if dataToSend == 0: #issue getting data
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
-                    if flag == Status.SUCCESS: 
+                    if flag == Status.SUCCESS:
                         self.file.totalUploaded += data[2] #update total uploaded
                         logger.debug(f"Data send back to {peer.addr} successfully")
                     else: #failed
