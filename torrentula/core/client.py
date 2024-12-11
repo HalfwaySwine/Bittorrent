@@ -137,7 +137,6 @@ class Client:
             self.cleanup_peers()
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
-                breakpoint()
                 if not tui.active:
                     self.repaint_progress()
                 self.send_uninterested()
