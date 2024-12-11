@@ -1,6 +1,6 @@
 from .utils.helpers import configure_logging, parse_arguments, validate_arguments
 from .core.client import Client
-from .core.strategy import Strategy, RarestFirstStrategy, PropShareStrategy
+from .core.strategy import Strategy, RarestFirstStrategy, PropShareStrategy, RandomStrategy
 
 
 def main():
@@ -12,6 +12,8 @@ def main():
         strategy = RarestFirstStrategy
     elif args.propshare:
         strategy = PropShareStrategy
+    elif args.random:
+        strategy = RandomStrategy
     else:
         strategy = Strategy
     

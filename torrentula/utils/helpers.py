@@ -129,6 +129,11 @@ def parse_arguments():
         help="Set strategy to rarest first.",
     )
     strategy_group.add_argument(
+        "--random",
+        action="store_true",
+        help="Set strategy to random piece assignment.",
+    )
+    strategy_group.add_argument(
         "--propshare",
         action="store_true",
         help="Set strategy to proportional share.",
