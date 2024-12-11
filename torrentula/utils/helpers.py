@@ -79,12 +79,13 @@ def parse_arguments():
         action="store_true",
         help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
     )
-    parser.add_argument(
+    display_group = parser.add_mutually_exclusive_group()  # User can select one display: verbose (logs) or tui (textual user interface).
+    display_group.add_argument(
         "--tui",
         action="store_true",
         help="View download progress in a textual user interface.",
     )
-    parser.add_argument(
+    display_group.add_argument(
         "--verbose",
         "-v",
         action="store_true",
