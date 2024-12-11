@@ -6,6 +6,7 @@ from ..config import (
     MAX_CONNECTED_PEERS,
     BITTORRENT_PORT,
     MAX_CONNECTION_ATTEMPTS,
+    LOOPBACK_IP,
 )
 from .tracker import Tracker
 from .strategy import Strategy
@@ -36,7 +37,17 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file: str, destination: str = ".", strategy=Strategy, clean=False, port: int = BITTORRENT_PORT, nat = False):
+    def __init__(
+        self,
+        torrent_file: str,
+        destination: str = ".",
+        strategy=Strategy,
+        clean: bool = False,
+        port: int = BITTORRENT_PORT,
+        nat: bool = False,
+        endgame_threshold: int = 101,
+        loopback_ports=[],  # For testing
+    ):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
@@ -47,13 +58,14 @@ class Client:
         self.peer_id = Client.generate_id()
         self.destination = destination
         self.nat = nat
-        self.load_torrent_file(torrent_file, clean)
+        self.load_torrent_file(torrent_file, clean, endgame_threshold)
         self.strategy = strategy()
+        self.loopback_ports = loopback_ports
         # Register signal handlers
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
-    def load_torrent_file(self, torrent_file, clean):
+    def load_torrent_file(self, torrent_file, clean, endgame_threshold):
         """
         Decodes and extracts information for a given '.torrent' file.
         """
@@ -120,7 +132,10 @@ class Client:
         self.repaint_progress()
         self.window = window
         self.tui = Tui(self, self.window)
-
+        for port in self.loopback_ports:
+            loopback_peer = Peer(LOOPBACK_IP, port, self.info_hash, self.peer_id, len(self.file.bitfield))
+            self.peers.append(loopback_peer)
+            logger.critical(f"Added loopback peer: {loopback_peer.display_peer()}")
         # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
@@ -277,10 +292,10 @@ class Client:
                     if dataToSend == 0:  # Issue getting data
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
-                    if flag == Status.SUCCESS: 
-                        self.file.total_uploaded += data[2] #update total uploaded
+                    if flag == Status.SUCCESS:
+                        self.file.total_uploaded += data[2]  # update total uploaded
                         logger.info(f"Data send back to {peer.addr} successfully")
-                    else: #failed
+                    else:  # failed
                         logger.info(f"Data failed to send back to {peer.addr}")
 
     def send_keepalives(self):
@@ -407,7 +422,7 @@ class Client:
         seconds = int(time_elapsed % 60)
         # Construct output string
         output = f"Seeding: {self.filename} | "
-        
+
         if self.nat:
             ip_addr, port = self.tracker.external_ip, self.tracker.externPort
         else:

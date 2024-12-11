@@ -58,6 +58,13 @@ def configure_logging(args):
     logger.info(f"Logger initialized to level={logger.level} and console_log={console_log}.")
 
 
+def parse_loopback_ports(value):
+    try:
+        return [int(port) for port in value.split(",")]
+    except ValueError:
+        raise argparse.ArgumentTypeError("Ports must be a comma-separated list of integers.")
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="A BitTorrent client to download a .torrent file from its distributed swarm.")
     parser.add_argument(
@@ -80,6 +87,18 @@ def parse_arguments():
         type=int,
         default=BITTORRENT_PORT,
         help="The port that the client will listen for incoming connections on.",
+    )
+    parser.add_argument(
+        "--endgame",
+        type=int,
+        default=101,
+        help="The progress percentage that will activate endgame mode.",
+    )
+    parser.add_argument(
+        "--loopback",
+        type=parse_loopback_ports,
+        default=[],
+        help="Comma-separated list of ports to connect to via loopback.",
     )
     parser.add_argument(
         "--nat",

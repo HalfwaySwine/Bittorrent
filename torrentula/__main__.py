@@ -16,14 +16,25 @@ def main():
         strategy = RandomStrategy
     else:
         strategy = Strategy
-    
-    client = Client(args.torr, args.dest, strategy, args.clean, args.port, args.nat)
+
+    kwargs = {
+        "torrent_file": args.torr,
+        "destination": args.dest,
+        "strategy": strategy,
+        "clean": args.clean,
+        "port": args.port,
+        "nat": args.nat,
+        "endgame_threshold": args.endgame,
+        "loopback_ports": args.loopback
+    }
+    client = Client(**kwargs)
+
     if args.tui:
         import curses
         curses.wrapper(client.download_torrent)
     else:
         client.download_torrent()
-    
+
     if args.seed:
         client.seed_torrent()
 

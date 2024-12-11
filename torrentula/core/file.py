@@ -7,7 +7,7 @@ from ..utils.helpers import logger
 
 
 class File:
-    def __init__(self, name, destination, length, piece_length, hashes, clean=False):
+    def __init__(self, name, destination, length, piece_length, hashes, clean=False, endgame_threshold=ENDGAME_CUTOFF_PERCENT):
         self.piece_length = piece_length
         self.name = name
         self.destination = destination
@@ -23,6 +23,7 @@ class File:
         self.bitfield: list[int] = self.load_bitfield_from_disk()
         self.initialize_missing_pieces()
         self.endgame_mode = False
+        self.endgame_threshold = endgame_threshold
 
     def initialize_pieces(self):
         logger.debug("Initializing pieces...")
@@ -118,7 +119,7 @@ class File:
                 f"{self.total_downloaded_percentage():.2f}% downloaded (verified), {self.total_downloaded_unverified_percentage():.2f}% downloaded (unverified)"
             )
         # set all pieces to endgame mode
-        if self.total_downloaded_percentage() > ENDGAME_CUTOFF_PERCENT and not self.endgame_mode:
+        if self.total_downloaded_percentage() > self.endgame_threshold and not self.endgame_mode:
             self.endgame_mode = True
             for piece in self.pieces:
                 piece.endgame_mode = True
