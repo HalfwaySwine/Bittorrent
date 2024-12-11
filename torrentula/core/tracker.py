@@ -175,6 +175,10 @@ class Tracker:
         if b"failure reason" in decoded:
             failure_reason = decoded[b"failure reason"].decode("utf-8")
             logger.critical(f"Query failed. Reason: {failure_reason}")
+        #hard code loop back
+        for p in peer_list:
+            if p.addr[1] == 7777: # uniquie port we could pass in as a argument
+                p.addr = ('127.0.0.1',p.addr[1]) 
         return peer_list
 
     def disconnect(self):
