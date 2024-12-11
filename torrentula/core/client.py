@@ -4,12 +4,11 @@ from ..config import (
     PEER_ID_LENGTH,
     MAX_PEER_OUTSTANDING_REQUESTS,
     MAX_CONNECTED_PEERS,
-    IN_PROGRESS_FILENAME_SUFFIX,
     BITTORRENT_PORT,
     MAX_CONNECTION_ATTEMPTS,
 )
 from .tracker import Tracker
-from .strategy import Strategy, RarestFirstStrategy, PropShareStrategy
+from .strategy import Strategy
 from .file import File
 from .piece import Piece
 from .tui import Tui
@@ -205,7 +204,7 @@ class Client:
 
     def execute_choke_transition(self):
         currently_unchoked = [peer for peer in self.peers if not peer.am_choking]
-        to_unchoke = self.strategy.choose_peers(self.peers)
+        to_unchoke = self.strategy.choose_peers(self.connected_peers())
         for peer in to_unchoke:
             peer.unchoke()
         choke = [peer for peer in currently_unchoked if peer not in to_unchoke]

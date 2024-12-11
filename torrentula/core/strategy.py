@@ -5,20 +5,21 @@ from ..utils.helpers import logger
 
 """
 Strategy Interface:
-    def choose_peers(self, peers: list[Peer]) -> list[Peer]:
-    def assign_pieces(self, remaining_pieces, peers: list[Peer]):
-    def send_haves(self, completed_pieces, actual_bitfield, peers):
-    def determine_additional_peers(self, file, connected_peers: list[Peer]) -> int:
+    def choose_peers(self, peers: list[Peer]) -> list[Peer]
+    def assign_pieces(self, remaining_pieces, peers: list[Peer])
+    def send_haves(self, completed_pieces, actual_bitfield, peers)
+    def determine_additional_peers(self, file, connected_peers: list[Peer]) -> int
 """
-class Strategy():
-    def choose_peers(self, peers: list[Peer]) -> list[Peer]:
+
+
+class Strategy:
+    def choose_peers(self, connected_peers: list[Peer]) -> list[Peer]:
         """
-        Given a list of peers, return a list of peers to unchoke.
+        Given a list of connected peers (who have completed the handshake), return a list of peers to unchoke.
         """
-        # filter out for connected, and interested
-        connected = [peer for peer in peers if peer.tcp_established and peer.peer_interested]
-        top_four = Strategy.get_top_four(connected)
-        not_top_four = [peer for peer in connected if peer not in top_four]
+        interested = [peer for peer in connected_peers if peer.peer_interested]
+        top_four = Strategy.get_top_four(interested)
+        not_top_four = [peer for peer in interested if peer not in top_four]
         optimistic_unchoke = [Strategy.get_optimistic_unchoke(not_top_four)] if not_top_four else []
         return top_four + optimistic_unchoke
 
@@ -134,6 +135,7 @@ class RarestFirstStrategy(Strategy):
 
 class PropShareStrategy(Strategy):
     pass
+
 
 class RandomStrategy(Strategy):
     def assign_pieces(self, remaining_pieces, peers: list[Peer]):
