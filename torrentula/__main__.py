@@ -14,7 +14,7 @@ def main():
         strategy = PropShareStrategy
     else:
         strategy = Strategy
-    client = Client(args.torr, args.dest, strategy)
+    client = Client(args.torr, args.dest, strategy, pref=args.pref)
     client.download_torrent()
 
 

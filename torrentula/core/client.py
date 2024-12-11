@@ -35,7 +35,7 @@ class Client:
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
     """
 
-    def __init__(self, torrent_file: str, destination: str = ".", strategy = Strategy, port: int = BITTORRENT_PORT):
+    def __init__(self, torrent_file: str, destination: str = ".", strategy = Strategy, port: int = BITTORRENT_PORT, pref:str ="http"):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
         self.bytes_downloaded: int = 0  # Total amount downloaded since client sent 'started' event to tracker
@@ -45,7 +45,7 @@ class Client:
         self.port = port
         self.peer_id = Client.generate_id()
         self.destination = destination
-        self.tracker_pref = "http" #replace with command line arg later
+        self.tracker_pref = pref #replace with command line arg later
         self.load_torrent_file(torrent_file)
         self.strategy = strategy()
         # Register signal handlers
