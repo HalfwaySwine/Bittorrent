@@ -1,0 +1,5 @@
+bencoder.pyx==3.0.1
+pynat==0.7.0
+setuptools==75.6.0
+six==1.17.0
+wheel==0.45.1
