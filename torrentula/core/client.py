@@ -125,7 +125,7 @@ class Client:
         # Main event loop
         while not self.file.complete():
             if self.window:
-                self.tui.update_display(self.repaint_progress)
+                self.tui.update_display(self.progress)
 
             # # only uncomment if you need it, will flood log
             # while_loop_delta_2 = datetime.now()
@@ -138,7 +138,7 @@ class Client:
             self.cleanup_peers()
             completed_pieces = self.file.update_bitfield()
             if completed_pieces:
-                if not tui.active:
+                if not self.tui.active:
                     self.repaint_progress()
                 self.send_uninterested()
             self.send_haves(completed_pieces)
