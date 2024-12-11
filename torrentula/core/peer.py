@@ -47,16 +47,29 @@ class Peer:
     Represents a peer Bittorrent client in the same swarm.
     """
 
+    def progress(self):
+        if self.is_seeder:
+            return 100
+        else:
+            percent = 100 * sum(bit for bit in self.bitfield) / self.bitfield_length
+            if percent == 100:
+                self.is_seeder == True
+            return percent
+
+    def display_progress(self):
+        progress = self.progress()
+        return "Seeder" if progress == 100 else f"Leecher ({progress:.2f}%)"
+
     def get_state(self):
         if not self.tcp_established:
-            assert self.sent_handshake == Handshake.HANDSHAKE_NOT_RECVD
+            assert self.received_handshake == Handshake.HANDSHAKE_NOT_RECVD, f"Instead {self.received_handshake}"
             if self.disconnect_count == 0:
                 return PeerState.CREATED
             else:
                 assert self.disconnect_count > 0
                 return PeerState.DISCONNECTED
         if self.tcp_established:
-            match self.sent_handshake:
+            match self.received_handshake:
                 case Handshake.HANDSHAKE_RECVD:
                     # 4 sub-states of upload state: peer_interested X am_choking
                     # 4 sub-states of download state: am_interested X peer_choking
@@ -66,6 +79,37 @@ class Peer:
                 case Handshake.CAN_RECV_BITFIELD:
                     return PeerState.AWAIT_BITFIELD
         assert False, "Should be unreachable code."
+
+    def display_state(self):
+        match self.get_state():
+            case PeerState.CREATED:
+                return "Idle"
+            case PeerState.DISCONNECTED:
+                return "Disconnected"
+            case PeerState.ACCEPTED:
+                return "Accepted"
+            case PeerState.SENT_HANDSHAKE:
+                return "Sent Handshake"
+            case PeerState.SENT_BITFIELD:
+                return "Sent Bitfield"
+            case PeerState.AWAIT_BITFIELD:
+                return "Await Bitfield"
+            case PeerState.DATA_TRANSFER:
+                if self.am_interested:
+                    if self.peer_choking:
+                        client = "Choked"
+                    else:
+                        client = "Unchoked"
+                elif not self.am_interested:
+                    client = "Not Interested"
+                if self.peer_interested:
+                    if self.am_choking:
+                        peer = "Choked"
+                    else:
+                        peer = "Unchoked"
+                elif not self.peer_interested:
+                    peer = "Not Interested"
+                return f"{client} (Peer {peer})"
 
     def __init__(self, ip_address, port, info_hash, peer_id, bitfield_length, sock=None, v4=True):
         """
@@ -91,6 +135,11 @@ class Peer:
         # Track statistics *per epoch* to inform strategic decision-making.
         self.bytes_received = 0
         self.bytes_sent = 0
+        self.total_bytes_received = 0
+        self.total_bytes_sent = 0
+        self.download_speed = 0
+        self.upload_speed = 0
+        self.is_seeder = False
 
         # Track statistics to inform peer reliability and connection health.
         self.connection_attempts = 0  # Reset upon success
@@ -156,7 +205,7 @@ class Peer:
         """
         Closes socket and resets connection params.
         """
-        if self.socket is not None: 
+        if self.socket is not None:
             self.socket.close()
 
         # reset most parameters, maybe have to add some
@@ -176,6 +225,10 @@ class Peer:
         self.bytes_received = 0
         self.bytes_sent = 0
         self.disconnect_count += 1
+
+        self.download_speed = 0
+        self.upload_speed = 0
+        self.is_seeder = False
 
         self.consume_message()
 
@@ -227,7 +280,7 @@ class Peer:
                             logger.debug(f"connection closed, disconnecting")
                             self.disconnect()
                             return Status.FAILURE
-                        self.msg_len_bytes[self.msg_len_loaded_bytes: self.msg_len_loaded_bytes + len(additional)] = additional
+                        self.msg_len_bytes[self.msg_len_loaded_bytes : self.msg_len_loaded_bytes + len(additional)] = additional
                         self.msg_len_loaded_bytes += len(additional)
                 except BlockingIOError as e:
                     logger.debug(f"waiting for next part of msg_len...")
@@ -259,7 +312,6 @@ class Peer:
                 logger.debug(f"waiting for next part of message, {self.loaded_bytes}/{self.msg_len}...")
                 return Status.IN_PROGRESS
 
-
             if self.loaded_bytes > self.msg_len or self.loaded_bytes < self.msg_len:
                 logger.error(f"received {self.loaded_bytes - self.msg_len} more bytes than expected?")
             # message is ready to be consumed
@@ -278,11 +330,11 @@ class Peer:
                 elif msg_type == MessageType.NOT_INTERESTED.value:
                     self.peer_interested = False
                 elif msg_type == MessageType.HAVE.value:
-                    piece_index = int.from_bytes(self.msg_buffer[1:self.msg_len], "big")
+                    piece_index = int.from_bytes(self.msg_buffer[1 : self.msg_len], "big")
                     self.bitfield[piece_index] = 1
                 elif msg_type == MessageType.BITFIELD.value:
                     if self.received_handshake is Handshake.CAN_RECV_BITFIELD:
-                        bitfield_bytes = self.msg_buffer[1:self.msg_len]
+                        bitfield_bytes = self.msg_buffer[1 : self.msg_len]
                         for i in range(len(self.bitfield)):
                             byte_index = i // 8
                             index_in_byte = i % 8
@@ -291,7 +343,7 @@ class Peer:
                     else:
                         logger.error("Bitfield rejected")
                 elif msg_type == MessageType.REQUEST.value:
-                    index, offset, length = struct.unpack(f"!III", self.msg_buffer[1:self.msg_len])
+                    index, offset, length = struct.unpack(f"!III", self.msg_buffer[1 : self.msg_len])
                     logger.debug(f"recieved request for index: {index}, offset {offset}, length: {length}")
                     self.incoming_requests.append((index, offset, length))
                 elif msg_type == MessageType.PIECE.value:
@@ -307,10 +359,10 @@ class Peer:
                         tup = (index, offset, length)
                         if tup in self.outgoing_requests:
                             self.outgoing_requests.remove(tup)
-                            piece.add_block(offset, self.msg_buffer[9:self.msg_len])
+                            piece.add_block(offset, self.msg_buffer[9 : self.msg_len])
                             self.bytes_received += length
                 elif msg_type == MessageType.CANCEL.value:
-                    info = self.msg_buffer[1:self.msg_len]
+                    info = self.msg_buffer[1 : self.msg_len]
                     index, offset, length = struct.unpack(f"!III", info)
                     tup = (index, offset, length)
                     logger.debug(f"recieved cancel for index: {index}, offset {offset}, length: {length}")
@@ -340,7 +392,7 @@ class Peer:
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
                 logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
-            # downgrade from error, this happens very often 
+            # downgrade from error, this happens very often
             logger.info(f"No bytes read from peer at {self.addr} but caller believed socket was readable. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
@@ -493,6 +545,10 @@ class Peer:
 
     def establish_new_epoch(self):
         res = (self.bytes_received, self.bytes_sent)
+        self.download_speed = self.bytes_received / 10240  # Convert to KB/s and average over last epoch
+        self.upload_speed = self.bytes_sent / 10240
+        self.total_bytes_received += self.bytes_received
+        self.total_bytes_sent += self.bytes_sent
         self.bytes_received = 0
         self.bytes_sent = 0
         return res
@@ -508,3 +564,26 @@ class Peer:
         else:
             socket_string = "None"
         return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}, disconnect_count: {self.disconnect_count:>4}, target_piece: {self.target_piece}, peer_choking: {self.peer_choking}, requests({len(self.outgoing_requests)}): {self.outgoing_requests}"
+
+    def display_peer(self):
+        # display_requests = [f"{request[0]}.{request[1]}" for request in self.outgoing_requests]
+        # display_requests = [f"{request[1]}" for request in self.outgoing_requests]
+        # display_requests = ", ".join(display_requests)
+        display_requests = len(self.outgoing_requests)
+        return (
+            self.addr[0],
+            self.addr[1],
+            self.display_progress(),
+            self.display_state(),
+            f"{self.total_bytes_sent / 1_000:.2f}",
+            f"{self.total_bytes_received / 1_000:.2f}",
+            self.download_speed,
+            self.upload_speed,
+            self.target_piece,
+            display_requests,
+        )
+
+    @staticmethod
+    def display_headers():
+        # Stats per epoch
+        return ("IP Address", "Port", "Type", "Status", "Uploaded (KB)", "Downloaded (KB)", "Download Speed (KB/S)", "Upload Speed (KB/S)", "Piece", "Requests")

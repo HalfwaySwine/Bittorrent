@@ -12,6 +12,7 @@ from .tracker import Tracker
 from .strategy import Strategy, RarestFirstStrategy, PropShareStrategy
 from .file import File
 from .piece import Piece
+from .tui import Tui
 import bencoder
 import traceback
 import os
@@ -99,7 +100,7 @@ class Client:
             hashes.append(hash)
         return hashes
 
-    def download_torrent(self) -> bool:
+    def download_torrent(self, win=None) -> bool:
         """
         Downloads the files from a .torrent file to a specified directory.
 
@@ -116,9 +117,15 @@ class Client:
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
-        track_while_loop_delta = datetime.now()
+        
+        if win:
+            tui = Tui(self, win)
+
+        # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
+            if win:
+                tui.update_display(win)
 
             # # only uncomment if you need it, will flood log
             # while_loop_delta_2 = datetime.now()
@@ -338,8 +345,18 @@ class Client:
         # Convert bytes to MB and average over seconds since last repaint.
         # self.download_speed = bytes_downloaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
         # self.uploaded_speed = bytes_uploaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
+        output = self.progress()
+        sys.stdout.write("\033[2K\r")  # Clear the line
+        sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
+        sys.stdout.flush()  # Ensure the output is written immediately
 
-        # Calculate time elapsed
+        # Update variables for next call
+        # self.last_interval = time.monotonic()
+        # self.last_bytes_downloaded = self.file.bytes_downloaded()
+        # self.last_bytes_uploaded = self.file.bytes_uploaded()
+
+    def progress(self):
+            # Calculate time elapsed
         time_elapsed = time.monotonic() - self.start_time
         minutes = int(time_elapsed // 60)
         seconds = int(time_elapsed % 60)
@@ -352,15 +369,8 @@ class Client:
         output += f"Completed: {self.file.get_progress()} | "
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
-        sys.stdout.write("\033[2K\r")  # Clear the line
-        sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
-        sys.stdout.flush()  # Ensure the output is written immediately
-
-        # Update variables for next call
-        # self.last_interval = time.monotonic()
-        # self.last_bytes_downloaded = self.file.bytes_downloaded()
-        # self.last_bytes_uploaded = self.file.bytes_uploaded()
-
+        return output
+    
     def __str__(self):
         """
         Displays progress report to user.

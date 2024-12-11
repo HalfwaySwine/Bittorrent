@@ -14,8 +14,13 @@ def main():
         strategy = PropShareStrategy
     else:
         strategy = Strategy
+    
     client = Client(args.torr, args.dest, strategy)
-    client.download_torrent()
+    if True:
+        import curses
+        curses.wrapper(client.download_torrent)
+    else:
+        client.download_torrent()
 
 
 if __name__ == "__main__":
