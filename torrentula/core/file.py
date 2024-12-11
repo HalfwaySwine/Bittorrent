@@ -11,19 +11,32 @@ class File:
         self.piece_length = piece_length
         self.name = name
         self.destination = destination
+        self.hashes = hashes
         self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
         if clean:
             self.remove_artifacts()
         self.length = length
         self.initialize_file()
-        self.totalUploaded = 0  # in bytes
-        logger.debug("Attepting to init pieces")
-        self.pieces: list[Piece] = [Piece(index, piece_length, hash, length, self.torrent_path, self.file) for index, hash in enumerate(hashes)]
-        self.pieces[-1].length = length - (len(self.pieces) - 1) * piece_length  # TODO check this
-        logger.debug(f"File - last piece length {length - (len(self.pieces) - 1) * piece_length}")
+        self.total_uploaded = 0  # In bytes
+        self.initialize_pieces()
         self.bitfield: list[int] = self.load_bitfield_from_disk()
         self.initialize_missing_pieces()
+
+    def initialize_pieces(self):
+        logger.debug("Initializing pieces...")
+        self.pieces: list[Piece] = [Piece(index, self.piece_length, hash, self.length, self.torrent_path, self.file) for index, hash in enumerate(self.hashes)]
+        self.pieces[-1].length = self.length - (len(self.pieces) - 1) * self.piece_length
+        logger.debug(f"File - last piece length {self.length - (len(self.pieces) - 1) * self.piece_length}")
+
+    def seed_file(self):
+        """
+        Open complete file for seeding and initialize bitfield to all ones.
+        """
+        self.file = open(self.torrent_path, "rb")
+        self.bitfield = [1] * len(self.pieces)
+        self.write_bitfield_to_disk()
+        self.initialize_pieces()
 
     def remove_artifacts(self):
         for path in [self.bitfield_path, self.torrent_path]:
@@ -177,9 +190,9 @@ class File:
         logger.debug("{total} bytes left (based on unverified data)")
         return total
 
-    def get_total_uploaded_bytes(self):
-        logger.debug(f"{self.totalUploaded} bytes uploaded")
-        return self.totalUploaded
+    def bytes_uploaded(self):
+        logger.debug(f"{self.total_uploaded} bytes uploaded")
+        return self.total_uploaded
 
     def bytes_downloaded_unverified(self):
         """
@@ -202,6 +215,7 @@ class File:
         """Renames the file. Used when the download is complete to remove the temporary suffix."""
         old = self.torrent_path
         os.rename(old, new)
+        self.torrent_path = new
         logger.info(f"Renamed file from '{old}' to '{new}'.")
 
     def remove_bitfield_from_disk(self):

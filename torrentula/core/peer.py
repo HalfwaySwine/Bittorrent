@@ -59,7 +59,12 @@ class Peer:
 
     def display_progress(self):
         progress = self.progress()
-        return "Seeder" if progress == 100 else f"Leecher ({progress:.2f}%)"
+        if progress == 100:
+            return "Seeder"
+        elif self.get_state() not in (PeerState.DISCONNECTED, PeerState.DATA_TRANSFER):
+            return "Unknown"
+        else:
+            f"Leecher ({progress:.2f}%)"
 
     def get_state(self):
         if not self.tcp_established:
@@ -570,9 +575,9 @@ class Peer:
         return f"is_connected: {int(self.tcp_established)}, {socket_string:<50}, bytes_sent: {self.bytes_sent:>7}, bytes_received: {self.bytes_received:>7}, connection_attempts: {self.connection_attempts:>2}, handshake_attempts: {self.handshake_attempts:>2}, disconnect_count: {self.disconnect_count:>4}, target_piece: {self.target_piece}, peer_choking: {self.peer_choking}, requests({len(self.outgoing_requests)}): {self.outgoing_requests}"
 
     def display_peer(self):
-        # display_requests = [f"{request[0]}.{request[1]}" for request in self.outgoing_requests]
-        # display_requests = [f"{request[1]}" for request in self.outgoing_requests]
-        # display_requests = ", ".join(display_requests)
+        display_requests = [f"{request[0]}.{request[1]}" for request in self.outgoing_requests]
+        display_requests = [f"{request[1]}" for request in self.outgoing_requests]
+        display_requests = ", ".join(display_requests)
         display_requests = len(self.outgoing_requests)
         return (
             self.addr[0],

@@ -31,6 +31,7 @@ from .peer import Peer, Handshake
 import errno
 import math
 
+
 class Client:
     """
     Enables leeching and seeding a torrent by contacting torrent tracker, managing connections to peers, and exchanging data.
@@ -64,10 +65,10 @@ class Client:
             print(e)
             sys.exit(1)
         # Extracts announce url from the torrent file and sets up the Tracker class.
-        announce_url = torrent_data[b"announce"].decode()
+        self.announce_url = torrent_data[b"announce"].decode()
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
-        self.tracker = Tracker(announce_url, self.peer_id, self.info_hash, len(hashes))
+        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(hashes))
         # Extracts file metadata from torrent file and sets up the File class.
         self.filename: str = torrent_data[b"info"][b"name"].decode("utf-8")
         self.length = int(torrent_data[b"info"][b"length"])
@@ -100,7 +101,7 @@ class Client:
             hashes.append(hash)
         return hashes
 
-    def download_torrent(self, window=None) -> bool:
+    def download_torrent(self, window=None, seeding=False) -> bool:
         """
         Downloads the files from a .torrent file to a specified directory.
 
@@ -117,14 +118,14 @@ class Client:
         self.peers = self.tracker.join_swarm(self.file.bytes_left(), self.port)
         self.epoch_start_time = datetime.now()
         self.repaint_progress()
-
-        tui = Tui(self, window)
+        self.window = window
+        self.tui = Tui(self, self.window)
 
         # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
-            if window:
-                tui.update_display(window)
+            if self.window:
+                self.tui.update_display(self.repaint_progress)
 
             # # only uncomment if you need it, will flood log
             # while_loop_delta_2 = datetime.now()
@@ -158,6 +159,27 @@ class Client:
             return True
         return False
 
+    def seed_torrent(self):
+        """
+        Seed the given torrent file. This method should run without download_torrent as a prerequisite. However, it assumes the seeder has a valid file.
+        """
+        self.open_socket()
+        self.file.seed_file()
+        self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield))
+        self.peers = self.tracker.join_swarm(0, self.port)
+        while True:  # Seed indefinitely, until signal is received and hopefully caught.
+            if self.tui.active:
+                self.tui.update_display(self.seeding_progress)
+            else:
+                self.repaint_seeding()
+            self.accept_peers()
+            self.receive_messages()
+            self.cleanup_peers()
+            self.send_requests_reponses_back()
+            self.send_keepalives()
+            if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
+                self.establish_new_epoch()
+
     def open_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -174,7 +196,7 @@ class Client:
             total_downloaded += downloaded
             total_uploaded += uploaded
         self.download_speed = total_downloaded / 10_485_760  # Convert bytes to MB and average over 10 seconds.
-        self.uploaded_speed = total_uploaded / 10_485_760
+        self.upload_speed = total_uploaded / 10_485_760
         self.execute_choke_transition()
         self.epoch_start_time = datetime.now()
         logger.debug("Established new epoch.")
@@ -255,7 +277,7 @@ class Client:
                         continue
                     flag = peer.send_piece(data[0], data[1], dataToSend)
                     if flag == Status.SUCCESS:
-                        self.file.totalUploaded += data[2]
+                        self.file.total_uploaded += data[2]
                         logger.debug(f"Data send back to {peer.addr} successfully")
                     else:
                         logger.debug(f"Data failed to send back to {peer.addr}")
@@ -349,11 +371,11 @@ class Client:
         # bytes_uploaded_since_last_repaint = self.file.bytes_uploaded() - self.last_bytes_uploaded
         # Convert bytes to MB and average over seconds since last repaint.
         # self.download_speed = bytes_downloaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
-        # self.uploaded_speed = bytes_uploaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
+        # self.upload_speed = bytes_uploaded_since_last_repaint / 10_485_76 / secs_since_last_repaint
         output = self.progress()
-        sys.stdout.write("\033[2K\r")  # Clear the line
-        sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return
-        sys.stdout.flush()  # Ensure the output is written immediately
+        sys.stdout.write("\033[2K\r")  # Clear the line.
+        sys.stdout.write(f"\r{output}")  # Clear the previous output with a carriage return.
+        sys.stdout.flush()  # Ensure the output is written immediately.
 
         # Update variables for next call
         # self.last_interval = time.monotonic()
@@ -366,7 +388,7 @@ class Client:
         minutes = int(time_elapsed // 60)
         seconds = int(time_elapsed % 60)
         # Construct output string
-        output = f"File: {self.filename} | "
+        output = f"Downloading: {self.filename} | "
         output += f"Time: {minutes}:{seconds:02d} | "
         output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
         output += f"Completed: {self.file.get_progress()} | "
@@ -374,11 +396,31 @@ class Client:
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
         return output
 
+    def seeding_progress(self):
+        # Calculate time elapsed
+        time_elapsed = time.monotonic() - self.start_time
+        minutes = int(time_elapsed // 60)
+        seconds = int(time_elapsed % 60)
+        # Construct output string
+        output = f"Seeding: {self.filename} | "
+        output += f"Time: {minutes}:{seconds:02d} | "
+        output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
+        output += f"Uploaded: {self.file.bytes_uploaded()} | "
+        output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
+        return output
+
+    def repaint_seeding(self):
+        output = self.seeding_progress()
+        # Clear line and write output immediately
+        sys.stdout.write("\033[2K\r")
+        sys.stdout.write(f"\r{output}")
+        sys.stdout.flush()
+
     def __str__(self):
         """
         Displays progress report to user.
         """
-        output = ("=== Client ===\n")
+        output = "=== Client ===\n"
         output += f"Torrent: {self.filename}\n"
         output += f"Destination: {self.destination}\n"
         output += f"Peer Id: {self.peer_id}\n"

@@ -21,6 +21,9 @@ def main():
         curses.wrapper(client.download_torrent)
     else:
         client.download_torrent()
+    
+    if args.seed:
+        client.seed_torrent()
 
 
 if __name__ == "__main__":
