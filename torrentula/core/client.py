@@ -47,7 +47,7 @@ class Client:
         nat: bool = False,
         endgame_threshold: int = 101,
         loopback_ports=[],  # For testing
-        internal=False, # For testing
+        internal=False,  # For testing
     ):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
@@ -178,8 +178,11 @@ class Client:
         self.open_socket()
         self.file.seed_file()
         self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield), self.nat)
-        self.peers = self.tracker.join_swarm(0, self.port)
-        self.peers = []  # No need to retain knowledge of peers in swarm.
+        # No need to retain knowledge of peers in swarm and its' nice for UI to retain data during transition.
+        _ = self.tracker.join_swarm(0, self.port)
+        for peer in self.peers:
+            peer.target_piece = None
+            peer.outgoing_requests = set()
         if self.tui.active:
             self.tui.win.clear()
         while True:  # Seed indefinitely, until signal is received and hopefully caught.
@@ -202,7 +205,6 @@ class Client:
                 self.peers.remove(peer)
                 if self.tui.active:
                     self.tui.win.clear()
-
 
     def open_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -413,7 +415,7 @@ class Client:
         output += f"Completed: {self.file.get_progress()} | "
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s | "
-        output += f"Port: {self.port}" 
+        output += f"Port: {self.port}"
         return output
 
     def seeding_progress(self):

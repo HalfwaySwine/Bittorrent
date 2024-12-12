@@ -80,7 +80,7 @@ class Piece:
                     self.pendingRequests[offset] = time.time()
                     logger.debug(f"Return value: {offset} {lengthToReturn}")
                     return (offset, lengthToReturn)
-        
+
         # in endgame mode we ignore already asked limitations
         if self.endgame_mode:
             # reset set if empty with unfulfilled blocks
@@ -159,8 +159,7 @@ class Piece:
             logger.debug("get_data_from_file retunred data")
             return data
         except Exception as e:
-            print("Error reading from disk: " + str(e))
-            logger.debug("Error reading from disk")
+            logger.error("Error reading from disk: " + str(e))
             return 0
 
     def set_complete_from_prev_download(self):
@@ -190,8 +189,7 @@ class Piece:
             self.fileDesc.seek(self.index * self.default_piece_length)
             self.fileDesc.write(self.pieceBuffer)
         except Exception as e:
-            print("Error writing to disk: " + str(e))
-            logger.debug("Error writing to disk")
+            logger.error("Error writing to disk: " + str(e))
 
     # returns string for debugging
     def __str__(self):
