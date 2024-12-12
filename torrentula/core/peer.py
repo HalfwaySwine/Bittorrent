@@ -498,6 +498,8 @@ class Peer:
         if len(self.outgoing_requests) == MAX_PEER_OUTSTANDING_REQUESTS:
             self.outgoing_requests = set()
             logger.error("peer object had large request backlog, refreshing")
+        if (index, offset, length) in self.outgoing_requests:
+            return Status.FAILURE
         self.outgoing_requests.add((index, offset, length))
         return self.send_msg(msg)
 
