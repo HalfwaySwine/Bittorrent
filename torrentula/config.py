@@ -16,7 +16,7 @@ MAX_CONNECTION_ATTEMPTS = 10
 LOOPBACK_IP = "127.0.0.1"
 
 # Primary performance tuning parameters
-ENDGAME_THRESHOLD = 97
+ENDGAME_THRESHOLD = 95
 NUM_RAREST_PIECES = 60  # The number of top rarest pieces to randomly choose from.
 # basically want to stop egregious request backlog
 MAX_PEER_OUTSTANDING_REQUESTS = 100
