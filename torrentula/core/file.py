@@ -14,6 +14,7 @@ class File:
         self.hashes = hashes
         self.bitfield_path = Path(destination) / f"{name}{BITFIELD_FILE_SUFFIX}"
         self.torrent_path = Path(destination) / f"{name}{IN_PROGRESS_FILENAME_SUFFIX}"
+        self.final_path = Path(self.destination) / self.name
         if clean:
             self.remove_artifacts()
         self.length = length
@@ -41,15 +42,14 @@ class File:
         self.initialize_pieces()
 
     def remove_artifacts(self):
-        for path in [self.bitfield_path, self.torrent_path]:
+        for path in [self.bitfield_path, self.torrent_path, self.final_path]:
             if os.path.exists(path):
                 os.remove(path)
                 logger.info(f"Running with '--clean' argument: removed file '{path}'")
 
     def initialize_file(self):
-        final_path = Path(self.destination) / self.name
-        if os.path.exists(final_path):  # Assume file already completely downloaded
-            self.torrent_path = final_path
+        if os.path.exists(self.final_path):  # Assume file already completely downloaded
+            self.torrent_path = self.final_path
             self.seed_file()  # TODO May be repetitive but still work.
         elif os.path.exists(self.torrent_path):  # Open existing file without overwriting
             self.file = open(self.torrent_path, "rb+")

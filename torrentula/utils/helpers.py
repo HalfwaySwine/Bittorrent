@@ -2,7 +2,7 @@ import logging
 import argparse
 import os
 import sys
-from ..config import LOG_FILENAME, LOG_DIRECTORY, BITTORRENT_PORT
+from ..config import LOG_FILENAME, LOG_DIRECTORY, BITTORRENT_PORT, ENDGAME_THRESHOLD
 
 logger = logging.getLogger(LOG_FILENAME)
 
@@ -91,7 +91,7 @@ def parse_arguments():
     parser.add_argument(
         "--endgame",
         type=int,
-        default=101,
+        default=ENDGAME_THRESHOLD,
         help="The progress percentage that will activate endgame mode.",
     )
     parser.add_argument(
@@ -110,7 +110,7 @@ def parse_arguments():
         "--clean",
         "-c",
         action="store_true",
-        help="Remove partially downloaded artifacts for the given torrent file in the destination directory before starting download.",
+        help="Remove all downloaded artifacts for the given torrent file in the destination directory before starting download.",
     )
     parser.add_argument(
         "--seed",
