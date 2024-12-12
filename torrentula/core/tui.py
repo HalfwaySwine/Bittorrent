@@ -15,27 +15,27 @@ class Tui:
         self.win = stdscr
         self.active = True
         self.client = client
-        self.header_widths = (17, 10, 20, 35, 16, 18, 24, 22, 9, 12)
-        self.columns = []
+        # Calculate column positions from column widths
+        self.column_widths = (17, 10, 20, 35, 16, 18, 24, 22, 9, 12)
         total = LEFT_INDENT  # Initial indent
-        for width in self.header_widths:
+        self.columns = []
+        for width in self.column_widths:
             self.columns.append(total)
             total += width
 
         curses.curs_set(0)  # Hide the cursor
         self.win.nodelay(True)  # Non-blocking input
-        self.win.timeout(1000)  # Refresh rate in ms
 
-        self.MIN_X = self.columns[-1] + self.header_widths[-1] + 2
+        self.MIN_X = self.columns[-1] + self.column_widths[-1] + 2
         self.MIN_Y = 14
 
     def draw_header(self, row):
         hdr = Peer.display_headers()
-        self.win.hline(row, LEFT_INDENT, "-", self.columns[-1] + self.header_widths[-1])
+        self.win.hline(row, LEFT_INDENT, "-", self.columns[-1] + self.column_widths[-1])
         for col, width in zip(hdr, self.columns):
             self.win.addstr(row + 1, width, "| " + col, curses.A_BOLD)
-        self.win.addstr(row + 1, self.columns[-1] + self.header_widths[-1] + 1, "|", curses.A_BOLD)
-        self.win.hline(row + 2, LEFT_INDENT, "-", self.columns[-1] + self.header_widths[-1])
+        self.win.addstr(row + 1, self.columns[-1] + self.column_widths[-1] + 1, "|", curses.A_BOLD)
+        self.win.hline(row + 2, LEFT_INDENT, "-", self.columns[-1] + self.column_widths[-1])
         return row + 3
 
     def update_display(self, summary_method):
@@ -48,7 +48,7 @@ class Tui:
             self.active = False
             return
 
-        self.win.clear()
+        self.win.noutrefresh()
         row = 0
         summary = summary_method()
 
@@ -76,10 +76,10 @@ class Tui:
         row = self.draw_header(row)
         max_peers = min(self.win.getmaxyx()[0] - row - 1, len(peers))
         for i, peer in enumerate(peers[: max_peers]):
-            for col, width in zip(peer, self.columns):
-                self.win.addstr(row + i, width, "| " + str(col))
-            self.win.addstr(row + i, self.columns[-1] + self.header_widths[-1], " |")
-        self.win.hline(row + max_peers, LEFT_INDENT, "-", self.columns[-1] + self.header_widths[-1])
+            for j, (col, width) in enumerate(zip(peer, self.columns)):
+                self.win.addstr(row + i, width, f"| {col}".ljust(self.column_widths[j]))
+            self.win.addstr(row + i, self.columns[-1] + self.column_widths[-1], " |")
+        self.win.hline(row + max_peers, LEFT_INDENT, "-", self.columns[-1] + self.column_widths[-1])
 
         # Handle input
         key = self.win.getch()
@@ -105,7 +105,7 @@ class Tui:
         else:
             res = [" "] * l
             SCALE = 0.25
-            THRESHOLD = 0.5 + SCALE * (self.client.file.total_downloaded_percentage() / 100)
+            THRESHOLD = 0.75 + SCALE * (self.client.file.total_downloaded_percentage() / 100)
             for i in range(l):
                 j_start = math.floor(i / l * p)
                 j_end = math.ceil((i + 1) / l * p)
