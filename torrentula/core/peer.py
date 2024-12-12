@@ -62,9 +62,9 @@ class Peer:
         if progress == 100:
             return "Seeder"
         elif self.get_state() not in (PeerState.DISCONNECTED, PeerState.DATA_TRANSFER):
-            return "Unknown"
-        else:
-            f"Leecher ({progress:.2f}%)"
+            return "---" # Created, Accepted, or Handshaking
+        elif self.bitfield is not None: # Currently connected or have been.
+            return f"Leecher ({progress:.2f}%)"
 
     def get_state(self):
         if not self.tcp_established:
@@ -498,7 +498,6 @@ class Peer:
         """sends data, passed in as bytes, as well as the index and offset of it
         also takes care of the incoming requests list, if it wasn't in there, fail"""
         tup = (index, offset, len(data))
-        self.bytes_sent += len(data)
         if tup in self.incoming_requests:
             msg_len = len(data) + 9
             msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)
@@ -608,8 +607,8 @@ class Peer:
             self.addr[1],
             self.display_progress(),
             self.display_state(),
-            f"{self.total_bytes_sent / 1_000:.2f}",
-            f"{self.total_bytes_received / 1_000:.2f}",
+            f"{(self.total_bytes_sent >> 10) + (self.bytes_sent >> 10)}",
+            f"{(self.total_bytes_received >> 10) + (self.bytes_received >> 10)}",
             self.download_speed,
             self.upload_speed,
             self.target_piece,
