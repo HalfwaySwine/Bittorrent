@@ -116,14 +116,13 @@ class File:
                 self.bitfield[index] = 1
 
         if newly_completed:  # Bitfield was updated
-            logger.debug("Attempting to update bitfield...")
             self.write_bitfield_to_disk()
             logger.debug("Bitfield updated!")
-            logger.info(
+            logger.debug(
                 f"{self.total_downloaded_percentage():.2f}% downloaded (verified), {self.total_downloaded_unverified_percentage():.2f}% downloaded (unverified)"
             )
-        # set all pieces to endgame mode
-        if self.total_downloaded_percentage() > self.endgame_threshold and not self.endgame_mode:
+        # Set all pieces to endgame mode when threshold is surpassed.
+        if self.endgame_threshold < 100 and self.total_downloaded_percentage() > self.endgame_threshold and not self.endgame_mode:
             self.endgame_mode = True
             for piece in self.pieces:
                 piece.endgame_mode = True
@@ -147,7 +146,7 @@ class File:
 
     def total_downloaded_percentage(self):
         """Get total download percent for verified data"""
-        return (self.bytes_downloaded_unverified() / self.length) * 100
+        return (self.bytes_downloaded() / self.length) * 100
 
     def total_downloaded_unverified_percentage(self):
         """Get total download percent for unverified data"""
