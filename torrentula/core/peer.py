@@ -63,8 +63,8 @@ class Peer:
         if progress == 100:
             return "Seeder"
         elif self.get_state() not in (PeerState.DISCONNECTED, PeerState.DATA_TRANSFER):
-            return "---" # Created, Accepted, or Handshaking
-        elif self.bitfield is not None: # Currently connected or have been.
+            return "---"  # Created, Accepted, or Handshaking
+        elif self.bitfield is not None:  # Currently connected or have been.
             return f"Leecher ({progress:.2f}%)"
 
     def get_state(self):
@@ -142,10 +142,8 @@ class Peer:
         # Track statistics *per epoch* to inform strategic decision-making.
         self.bytes_received = 0
         self.bytes_sent = 0
-        self.total_bytes_received = 0
-        self.total_bytes_sent = 0
-        self.kilobytes_received = 0 # Never reset
-        self.kilobytes_sent = 0 # Never reset
+        self.kilobytes_received = 0  # Never reset
+        self.kilobytes_sent = 0  # Never reset
         self.download_speed = 0
         self.upload_speed = 0
         self.is_seeder = False
@@ -394,13 +392,6 @@ class Peer:
                 # once we receive any message other than a handshake we can't receive a bitmap anymore
                 self.received_handshake = Handshake.HANDSHAKE_RECVD
                 self.connection_attempts = 0
-                # speedup method, but I don't know why
-                # according to chatgpt: Seeders maintain limited upload slots, so if you're not prioritized, reconnecting can sometimes reset the priority dynamics.
-                if self.total_bytes_received > 100000:
-                    self.kilobytes_received += self.total_bytes_received / 1_024
-                    self.kilobytes_sent += self.total_bytes_sent / 1_024
-                    self.total_bytes_received = 0
-                    self.total_bytes_sent = 0
                 self.consume_message()
 
         return Status.SUCCESS
@@ -582,8 +573,8 @@ class Peer:
         res = (self.bytes_received, self.bytes_sent)
         self.download_speed = self.bytes_received / 10240  # Convert to KB/s and average over last epoch
         self.upload_speed = self.bytes_sent / 10240
-        self.total_bytes_received += self.bytes_received
-        self.total_bytes_sent += self.bytes_sent
+        self.kilobytes_received += self.bytes_received / 1024
+        self.kilobytes_sent += self.bytes_sent / 1024
         self.bytes_received = 0
         self.bytes_sent = 0
         return res
@@ -614,11 +605,11 @@ class Peer:
             self.display_progress(),
             "Yes" if self.am_interested else "No",
             "Choked" if self.peer_choking else "Unchoked",
-            f"{int(self.kilobytes_received + (self.total_bytes_received >> 10) + (self.bytes_received >> 10))}",
+            f"{int(self.kilobytes_received + (self.bytes_received >> 10))}",
             f"{self.download_speed:.2f}",
             "Yes" if self.peer_interested else "No",
             "Choked" if self.am_choking else "Unchoked",
-            f"{int(self.kilobytes_sent + (self.total_bytes_sent >> 10) + (self.bytes_sent >> 10))}",
+            f"{int(self.kilobytes_sent + (self.bytes_sent >> 10))}",
             f"{self.upload_speed:.2f}",
             self.target_piece,
             display_requests,
@@ -627,4 +618,18 @@ class Peer:
     @staticmethod
     def display_headers():
         # Stats per epoch
-        return ("IP Address", "Port", "Type", "Interest", "Choke", "Downloaded (KB)", "Speed (KB/S)", "Peer Interest", "Choke", "Uploaded (KB)", "Speed (KB/S)", "Piece", "Requests")
+        return (
+            "IP Address",
+            "Port",
+            "Type",
+            "Interest",
+            "Choke",
+            "Downloaded (KB)",
+            "Speed (KB/S)",
+            "Peer Interest",
+            "Choke",
+            "Uploaded (KB)",
+            "Speed (KB/S)",
+            "Piece",
+            "Requests",
+        )
