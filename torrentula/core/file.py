@@ -118,6 +118,7 @@ class File:
         if newly_completed:  # Bitfield was updated
             self.write_bitfield_to_disk()
             logger.debug("Bitfield updated!")
+            logger.debug(f"{len(self.missing_pieces_set)} missing pieces left: {",".join(map(str, self.missing_pieces_set))}")
             logger.debug(
                 f"{self.total_downloaded_percentage():.2f}% downloaded (verified), {self.total_downloaded_unverified_percentage():.2f}% downloaded (unverified)"
             )
