@@ -47,6 +47,7 @@ class Client:
         nat: bool = False,
         endgame_threshold: int = 101,
         loopback_ports=[],  # For testing
+        internal=False, # For testing
     ):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
@@ -61,6 +62,7 @@ class Client:
         self.load_torrent_file(torrent_file, clean, endgame_threshold)
         self.strategy = strategy()
         self.loopback_ports = loopback_ports
+        self.internal = internal
         # Register signal handlers
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -132,7 +134,8 @@ class Client:
         self.repaint_progress()
         self.window = window
         self.tui = Tui(self, self.window)
-        # self.peers = []
+        if self.internal:
+            self.peers = []
         for port in self.loopback_ports:
             loopback_peer = Peer(LOOPBACK_IP, port, self.info_hash, self.peer_id, len(self.file.bitfield))
             self.peers.append(loopback_peer)
@@ -184,6 +187,8 @@ class Client:
         self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield), self.nat)
         self.peers = self.tracker.join_swarm(0, self.port)
         self.peers = []  # No need to retain knowledge of peers in swarm.
+        if self.tui.active:
+            self.tui.win.clear()
         while True:  # Seed indefinitely, until signal is received and hopefully caught.
             if self.tui.active:
                 self.tui.update_display(self.seeding_progress)
@@ -202,6 +207,9 @@ class Client:
         for peer in self.peers:
             if peer.get_state() == PeerState.DISCONNECTED and peer.timeout():
                 self.peers.remove(peer)
+                if self.tui.active:
+                    self.tui.win.clear()
+
 
     def open_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -381,6 +389,8 @@ class Client:
             peer.disconnect()
             logger.error(f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts.")
             self.peers.remove(peer)
+            if self.tui.active:
+                self.tui.win.clear()
 
     def display_peers(self):
         """
@@ -420,7 +430,8 @@ class Client:
         output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
         output += f"Completed: {self.file.get_progress()} | "
         output += f"Download Speed: {self.download_speed:.2f} MB/s | "
-        output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
+        output += f"Upload Speed: {self.upload_speed:.2f} MB/s | "
+        output += f"Port: {self.port}" 
         return output
 
     def seeding_progress(self):
@@ -439,7 +450,7 @@ class Client:
         output += f"Port: {port} | "
         output += f"Time: {minutes}:{seconds:02d} | "
         output += f"Peers: {len(self.peers)} ({len(self.connected_peers())} connected) | "
-        output += f"Uploaded: {self.file.bytes_uploaded()} | "
+        output += f"Uploaded: {self.file.bytes_uploaded() / 1_048_576:.2f} MB | "
         output += f"Upload Speed: {self.upload_speed:.2f} MB/s"
         return output
 

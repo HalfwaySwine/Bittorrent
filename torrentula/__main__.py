@@ -25,7 +25,8 @@ def main():
         "port": args.port,
         "nat": args.nat,
         "endgame_threshold": args.endgame,
-        "loopback_ports": args.loopback
+        "loopback_ports": args.loopback,
+        "internal": args.internal,
     }
     client = Client(**kwargs)
 

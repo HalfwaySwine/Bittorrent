@@ -16,7 +16,7 @@ class Tui:
         self.active = True
         self.client = client
         # Calculate column positions from column widths
-        self.column_widths = (17, 10, 20, 35, 16, 18, 24, 22, 9, 12)
+        self.column_widths = (17, 10, 20, 11, 11, 18, 15, 15, 11, 16, 15, 9, 10)
         total = LEFT_INDENT  # Initial indent
         self.columns = []
         for width in self.column_widths:
@@ -33,8 +33,8 @@ class Tui:
         hdr = Peer.display_headers()
         self.win.hline(row, LEFT_INDENT, "-", self.columns[-1] + self.column_widths[-1])
         for col, width in zip(hdr, self.columns):
-            self.win.addstr(row + 1, width, "| " + col, curses.A_BOLD)
-        self.win.addstr(row + 1, self.columns[-1] + self.column_widths[-1] + 1, "|", curses.A_BOLD)
+            self.win.addstr(row + 1, width, "| " + col)
+        self.win.addstr(row + 1, self.columns[-1] + self.column_widths[-1] + 1, "|")
         self.win.hline(row + 2, LEFT_INDENT, "-", self.columns[-1] + self.column_widths[-1])
         return row + 3
 
@@ -104,8 +104,7 @@ class Tui:
                     res[i] = "#"
         else:
             res = [" "] * l
-            SCALE = 0.25
-            THRESHOLD = 0.75 + SCALE * (self.client.file.total_downloaded_percentage() / 100)
+            THRESHOLD = 0.75
             for i in range(l):
                 j_start = math.floor(i / l * p)
                 j_end = math.ceil((i + 1) / l * p)

@@ -7,6 +7,7 @@ from .block import Block
 import select
 import socket
 import struct
+import random
 import errno
 
 
@@ -143,6 +144,8 @@ class Peer:
         self.bytes_sent = 0
         self.total_bytes_received = 0
         self.total_bytes_sent = 0
+        self.kilobytes_received = 0 # Never reset
+        self.kilobytes_sent = 0 # Never reset
         self.download_speed = 0
         self.upload_speed = 0
         self.is_seeder = False
@@ -393,8 +396,12 @@ class Peer:
                 self.connection_attempts = 0
                 # speedup method, but I don't know why
                 # according to chatgpt: Seeders maintain limited upload slots, so if you're not prioritized, reconnecting can sometimes reset the priority dynamics.
-                if self.total_bytes_received > 100000 and self.addr[0] != LOOPBACK_IP:
+                BOUNCE_PROBABILILTY = 0.999
+                if self.total_bytes_received > 100000 and random.random() > BOUNCE_PROBABILILTY:
+                    self.kilobytes_received += self.total_bytes_received / 1_024
+                    self.kilobytes_sent += self.total_bytes_sent / 1_024
                     self.total_bytes_received = 0
+                    self.total_bytes_sent = 0
                     self.disconnect()
                     return Status.FAILURE
                 self.consume_message()
@@ -606,11 +613,14 @@ class Peer:
             self.addr[0],
             self.addr[1],
             self.display_progress(),
-            self.display_state(),
-            f"{(self.total_bytes_sent >> 10) + (self.bytes_sent >> 10)}",
-            f"{(self.total_bytes_received >> 10) + (self.bytes_received >> 10)}",
-            self.download_speed,
-            self.upload_speed,
+            "Yes" if self.am_interested else "No",
+            "Choked" if self.peer_choking else "Unchoked",
+            f"{int(self.kilobytes_received + (self.total_bytes_received >> 10) + (self.bytes_received >> 10))}",
+            f"{self.download_speed:.2f}",
+            "Yes" if self.peer_interested else "No",
+            "Choked" if self.am_choking else "Unchoked",
+            f"{int(self.kilobytes_sent + (self.total_bytes_sent >> 10) + (self.bytes_sent >> 10))}",
+            f"{self.upload_speed:.2f}",
             self.target_piece,
             display_requests,
         )
@@ -618,4 +628,4 @@ class Peer:
     @staticmethod
     def display_headers():
         # Stats per epoch
-        return ("IP Address", "Port", "Type", "Status", "Uploaded (KB)", "Downloaded (KB)", "Download Speed (KB/S)", "Upload Speed (KB/S)", "Piece", "Requests")
+        return ("IP Address", "Port", "Type", "Interest", "Choke", "Downloaded (KB)", "Speed (KB/S)", "Peer Interest", "Choke", "Uploaded (KB)", "Speed (KB/S)", "Piece", "Requests")

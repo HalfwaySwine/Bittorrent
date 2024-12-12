@@ -113,6 +113,11 @@ def parse_arguments():
         help="Remove all downloaded artifacts for the given torrent file in the destination directory before starting download.",
     )
     parser.add_argument(
+        "--internal",
+        action="store_true",
+        help="Do not connect to any peers provided by the tracker.",
+    )
+    parser.add_argument(
         "--seed",
         "-s",
         action="store_true",
