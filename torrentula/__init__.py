@@ -6,7 +6,7 @@ from .core.block import Block
 from .core.file import File
 from .core.peer import Peer
 from .core.piece import Piece
-from .core.strategy import Strategy
+from .core.strategy import *
 from .core.tracker import Tracker
 from .utils.helpers import *
 from .config import *

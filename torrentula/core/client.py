@@ -387,7 +387,7 @@ class Client:
         unreliable = [peer for peer in self.peers if peer.connection_attempts > MAX_CONNECTION_ATTEMPTS]
         for peer in unreliable:
             peer.disconnect()
-            logger.error(f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts.")
+            logger.info(f"Removing unreliable peer at {peer.addr} after {peer.connection_attempts} connection attempts.")
             self.peers.remove(peer)
             if self.tui.active:
                 self.tui.win.clear()
