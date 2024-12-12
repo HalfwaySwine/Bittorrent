@@ -132,7 +132,7 @@ class Client:
         self.repaint_progress()
         self.window = window
         self.tui = Tui(self, self.window)
-        self.peers = []
+        # self.peers = []
         for port in self.loopback_ports:
             loopback_peer = Peer(LOOPBACK_IP, port, self.info_hash, self.peer_id, len(self.file.bitfield))
             self.peers.append(loopback_peer)
