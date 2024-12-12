@@ -36,7 +36,7 @@ class File:
         Open complete file for seeding and initialize bitfield to all ones.
         """
         self.file = open(self.torrent_path, "rb")
-        self.bitfield = [1] * len(self.pieces)
+        self.bitfield = [1] * len(self.hashes)
         self.write_bitfield_to_disk()
         self.initialize_pieces()
 
@@ -47,7 +47,11 @@ class File:
                 logger.info(f"Running with '--clean' argument: removed file '{path}'")
 
     def initialize_file(self):
-        if os.path.exists(self.torrent_path):  # Open existing file without overwriting
+        final_path = Path(self.destination) / self.name
+        if os.path.exists(final_path):  # Assume file already completely downloaded
+            self.torrent_path = final_path
+            self.seed_file()  # TODO May be repetitive but still work.
+        elif os.path.exists(self.torrent_path):  # Open existing file without overwriting
             self.file = open(self.torrent_path, "rb+")
             logger.debug("In-progress download file already exists.")
         else:  # Create a new empty file

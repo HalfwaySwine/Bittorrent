@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from enum import Enum, auto
-from ..config import PEER_INACTIVITY_TIMEOUT_SECS, MAX_PEER_OUTSTANDING_REQUESTS
+from ..config import PEER_INACTIVITY_TIMEOUT_SECS, MAX_PEER_OUTSTANDING_REQUESTS, LOOPBACK_IP
 from ..utils.helpers import logger, Status
 from .piece import Piece
 from .block import Block
@@ -240,7 +240,7 @@ class Peer:
         self.can_send_bitfield = False  # client checks and handles sending bitfields
         self.tcp_established = False  # self explanatory, if we have a socket and this is false, connection is ongoing
         self.socket = None  # Value is None when this peer is disconnected.
-        self.disconnect_count += 1 
+        self.disconnect_count += 1
 
         self.msg_len = None
         self.msg_len_loaded_bytes = 0
@@ -393,7 +393,7 @@ class Peer:
                 self.connection_attempts = 0
                 # speedup method, but I don't know why
                 # according to chatgpt: Seeders maintain limited upload slots, so if you're not prioritized, reconnecting can sometimes reset the priority dynamics.
-                if self.total_bytes_received > 100000:
+                if self.total_bytes_received > 100000 and not self.addr[0] != LOOPBACK_IP:
                     self.total_bytes_received = 0
                     self.disconnect()
                     return Status.FAILURE
@@ -412,9 +412,8 @@ class Peer:
         if len(pstrlen_bytes) == 0:
             error = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
             if error != 0:
-                logger.error(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
-            # downgrade from error, this happens very often 
-            logger.error(f"{self.addr} disconnected from us. Disconnecting...")
+                logger.info(f"Connection to peer at {self.addr} failed with error code {error}: {errno.errorcode.get(error, 'Unknown error')}")
+            logger.info(f"{self.addr} disconnected from us. Disconnecting...")
             self.disconnect()
             return Status.FAILURE
 
@@ -504,7 +503,10 @@ class Peer:
             msg_len = len(data) + 9
             msg = struct.pack(f"!IBII{len(data)}s", msg_len, MessageType.PIECE.value, index, offset, data)
             self.incoming_requests.remove(tup)
-            return self.send_msg(msg)
+            res = self.send_msg(msg)
+            if res == Status.SUCCESS:
+                self.bytes_sent += len(data)
+            return res
         return Status.FAILURE
 
     def send_cancel(self, index, offset, length):
@@ -582,8 +584,11 @@ class Peer:
         return res
 
     def disconnect_if_timeout(self):
-        if self.socket and datetime.now() - self.last_received > timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS):
+        if self.socket and self.timeout():
             self.disconnect()
+
+    def timeout(self):
+        return datetime.now() - self.last_received > timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS)
 
     def __str__(self):
         """Just prints connection state for now"""

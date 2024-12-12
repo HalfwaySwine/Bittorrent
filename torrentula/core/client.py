@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 import hashlib
 from urllib.parse import quote_plus
 from pathlib import Path
-from .peer import Peer, Handshake
+from .peer import Peer, Handshake, PeerState
 import errno
 import math
 
@@ -132,10 +132,11 @@ class Client:
         self.repaint_progress()
         self.window = window
         self.tui = Tui(self, self.window)
+        self.peers = []
         for port in self.loopback_ports:
             loopback_peer = Peer(LOOPBACK_IP, port, self.info_hash, self.peer_id, len(self.file.bitfield))
             self.peers.append(loopback_peer)
-            logger.critical(f"Added loopback peer: {loopback_peer.display_peer()}")
+            logger.info(f"Added loopback peer: {loopback_peer.display_peer()}")
         # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
@@ -182,6 +183,7 @@ class Client:
         self.file.seed_file()
         self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(self.file.bitfield), self.nat)
         self.peers = self.tracker.join_swarm(0, self.port)
+        self.peers = []  # No need to retain knowledge of peers in swarm.
         while True:  # Seed indefinitely, until signal is received and hopefully caught.
             if self.tui.active:
                 self.tui.update_display(self.seeding_progress)
@@ -189,11 +191,17 @@ class Client:
                 self.repaint_seeding()
             self.accept_peers()
             self.receive_messages()
-            self.cleanup_peers()
             self.send_requests_reponses_back()
             self.send_keepalives()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
+                self.cleanup_peers()
+                self.cleanup_leechers()
                 self.establish_new_epoch()
+
+    def cleanup_leechers(self):
+        for peer in self.peers:
+            if peer.get_state() == PeerState.DISCONNECTED and peer.timeout():
+                self.peers.remove(peer)
 
     def open_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

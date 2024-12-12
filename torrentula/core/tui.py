@@ -75,11 +75,11 @@ class Tui:
         peers = self.fetch_peer_data()
         row = self.draw_header(row)
         max_peers = min(self.win.getmaxyx()[0] - row - 1, len(peers))
-        for i, peer in enumerate(peers[:max_peers]):
+        for i, peer in enumerate(peers[: max_peers]):
             for col, width in zip(peer, self.columns):
                 self.win.addstr(row + i, width, "| " + str(col))
             self.win.addstr(row + i, self.columns[-1] + self.header_widths[-1], " |")
-        self.win.hline(row + max_peers - 1, LEFT_INDENT, "-", self.columns[-1] + self.header_widths[-1])
+        self.win.hline(row + max_peers, LEFT_INDENT, "-", self.columns[-1] + self.header_widths[-1])
 
         # Handle input
         key = self.win.getch()
@@ -97,7 +97,7 @@ class Tui:
         # Map completed pieces from bitfield to length of a progress bar
         bitfield = self.client.file.bitfield
         p = len(bitfield)
-        if l > p: # Handle unusual case when l is greater than length of bitfield
+        if l > p:  # Handle unusual case when l is greater than length of bitfield
             res = [" "] * l
             for i in range(l):
                 if bitfield[math.floor(i / l * p)] == 1:
