@@ -393,7 +393,7 @@ class Peer:
                 self.connection_attempts = 0
                 # speedup method, but I don't know why
                 # according to chatgpt: Seeders maintain limited upload slots, so if you're not prioritized, reconnecting can sometimes reset the priority dynamics.
-                if self.total_bytes_received > 100000 and not self.addr[0] != LOOPBACK_IP:
+                if self.total_bytes_received > 100000 and self.addr[0] != LOOPBACK_IP:
                     self.total_bytes_received = 0
                     self.disconnect()
                     return Status.FAILURE
