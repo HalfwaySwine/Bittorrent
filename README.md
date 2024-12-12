@@ -1,5 +1,11 @@
 # Torrentula: A BitTorrent Client
 
+
+# More Details on how to run and information:
+
+ - More details in report.ipynb
+
+
 ## Getting started
 
 The **BitTorrent client** can be used in two ways: as a command-line script or imported as a package into other Python code.
@@ -49,29 +55,3 @@ python -m unittest discover -s tests
 ```
 
 
-# Work in Progress:
-
-
-## Name
-
-## Description
-
-## Badges
-
-## Visuals
-
-## Installation
-
-## Usage
-
-## Support
-
-## Roadmap
-
-## Contributing
-
-## Authors and acknowledgment
-
-## License
-
-## Project status
