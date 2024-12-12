@@ -100,7 +100,7 @@ class Piece:
         logger.debug("All requests for this piece are currently allocated to peers.")
         return (None, None)
 
-    # checks if its been to long since it requested this block if so needs to re request it (helper fucntion)
+    # checks if its been to long since it requested this block if so needs to re request it (helper function)
     # returns true if it needs to be requested
     def _check_if_already_asked(self, offset):
         if offset not in self.pendingRequests:
