@@ -135,6 +135,12 @@ def parse_arguments():
         action="store_true",
         help="Include logs with console output (stderr).",
     )
+    parser.add_argument(
+        "--pref",
+        type=str,
+        default="http",
+        help="The preferred tracker type (http, https, or udp).",
+    )
     log_group = parser.add_mutually_exclusive_group()  # User can select one level: debug, info, or none (default).
     log_group.add_argument(
         "--debug",

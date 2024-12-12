@@ -27,6 +27,7 @@ def main():
         "endgame_threshold": args.endgame,
         "loopback_ports": args.loopback,
         "internal": args.internal,
+        "pref": args.pref
     }
     client = Client(**kwargs)
 

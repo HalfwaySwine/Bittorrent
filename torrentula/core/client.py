@@ -48,6 +48,7 @@ class Client:
         endgame_threshold: int = 101,
         loopback_ports=[],  # For testing
         internal=False, # For testing
+        pref:str ="http"
     ):
         self.start_time = time.monotonic()
         self.bytes_uploaded: int = 0  # Total amount uploaded since client sent 'started' event to tracker
@@ -59,6 +60,7 @@ class Client:
         self.peer_id = Client.generate_id()
         self.destination = destination
         self.nat = nat
+        self.tracker_pref = pref
         self.load_torrent_file(torrent_file, clean, endgame_threshold)
         self.strategy = strategy()
         self.loopback_ports = loopback_ports
@@ -78,8 +80,17 @@ class Client:
             print(f"Error: Could not decode torrent file '{torrent_file}'!")
             print(e)
             sys.exit(1)
+
         # Extracts announce url from the torrent file and sets up the Tracker class.
         self.announce_url = torrent_data[b"announce"].decode()
+        #check announce-list for preference, if it doesn't exist, just use default
+        if self.tracker_pref not in  self.announce_url:
+            if b"announce-list" in torrent_data:
+                tracker_list = torrent_data[b"announce-list"]
+                for i in range(0, len(tracker_list)):
+                    if self.tracker_pref in tracker_list[i][0].decode():
+                        self.announce_url = tracker_list[i][0].decode()
+                        
         self.info_hash = hashlib.sha1(bencoder.bencode(torrent_data[b"info"])).digest()
         hashes = Client.split_hashes(torrent_data[b"info"][b"pieces"])
         self.tracker = Tracker(self.announce_url, self.peer_id, self.info_hash, len(hashes), self.nat)
