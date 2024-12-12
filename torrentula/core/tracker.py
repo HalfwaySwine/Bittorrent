@@ -119,11 +119,7 @@ class Tracker:
             params["ip"] = self.external_ip
             params["port"] = self.externPort
 
-        parsed_url = urlparse(self.url)
-        host = parsed_url.hostname
-        port = parsed_url.port
-        path = parsed_url.path
-        tracker_addr = (host, port)
+        
         logger.debug(f"Attempting to connect to tracker at {host}:{port} over TCP...")
         if self.type == "https":
             context = ssl.create_default_context()
