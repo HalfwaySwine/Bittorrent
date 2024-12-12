@@ -1,11 +1,12 @@
-from .peer import Peer
+from .peer import Peer, Handshake
+from .file import File
 from random import choice
-from ..config import MIN_CONNECTED_PEERS, MAX_CONNECTED_PEERS, NUM_RAREST_PIECES
-from ..utils.helpers import logger
+from ..config import MIN_CONNECTED_PEERS, MAX_CONNECTED_PEERS, NUM_RAREST_PIECES, EPOCH_DURATION_SECS
+from ..utils.helpers import logger, Status
 
 """
 Strategy Interface:
-    def choose_peers(self, peers: list[Peer]) -> list[Peer]
+    def choose_peers(self, peers: list[Peer], upload_speed, download_speed) -> list[Peer]
     def assign_pieces(self, remaining_pieces, peers: list[Peer])
     def send_haves(self, completed_pieces, actual_bitfield, peers)
     def determine_additional_peers(self, file, connected_peers: list[Peer]) -> int
@@ -13,11 +14,11 @@ Strategy Interface:
 
 
 class Strategy:
-    def choose_peers(self, connected_peers: list[Peer]) -> list[Peer]:
+    def choose_peers(self, peers: list[Peer], upload_speed, download_speed) -> list[Peer]:
         """
-        Given a list of connected peers (who have completed the handshake), return a list of peers to unchoke.
+        Given a list of peers, return a list of peers to unchoke.
         """
-        interested = [peer for peer in connected_peers if peer.peer_interested]
+        interested = [peer for peer in peers if peer.peer_interested and peer.tcp_established and peer.received_handshake == Handshake.HANDSHAKE_RECVD]
         top_four = Strategy.get_top_four(interested)
         not_top_four = [peer for peer in interested if peer not in top_four]
         optimistic_unchoke = [Strategy.get_optimistic_unchoke(not_top_four)] if not_top_four else []
@@ -45,12 +46,25 @@ class Strategy:
             else:
                 remaining_pieces_copy = set(remaining_pieces)
 
-    def shuffle_pieces(self, remaining_pieces, peers: list[Peer]):
-        """Shuffles piece assignments, may be useful in some cases but not called currently"""
-        # set comprehension
-        all_peers = {peer for peer in peers if not peer.peer_choking and peer.am_interested}
-        for peer in all_peers:
-            peer.target_piece = None
+    def fulfill_requests(self, peers: list[Peer], file: File):
+        for peer in peers:
+            peer.allotment = file.piece_length  # Default upload limit per turn (equal).
+            for block_request in peer.incoming_requests:
+                index, offset, length = block_request
+                peer.allotment -= length  # Decrement allotment whether or not request is successful.
+                if peer.allotment < 0:
+                    # Do not remove from requests.
+                    break
+                data_to_send = file.get_data_from_piece(offset, length, index)
+                if data_to_send == 0:  # Issue retrieving data
+                    peer.incoming_requests.pop(0)
+                    continue
+                flag = peer.send_piece(index, offset, data_to_send)
+                if flag == Status.SUCCESS:
+                    file.total_uploaded += length / 1024  # Update total uploaded
+                    logger.debug(f"Data successfully sent to {peer.addr}")
+                else:
+                    logger.debug(f"Data failed to send to {peer.addr}")
 
     def send_haves(self, completed_pieces, actual_bitfield, peers):
         for peer in peers:
@@ -62,6 +76,15 @@ class Strategy:
             return MAX_CONNECTED_PEERS - len(connected_peers)
         else:
             return 0
+
+    # Helper methods
+
+    def shuffle_pieces(self, remaining_pieces, peers: list[Peer]):
+        """Shuffles piece assignments, may be useful in some cases but not called currently"""
+        # Set comprehension
+        all_peers = {peer for peer in peers if not peer.peer_choking and peer.am_interested}
+        for peer in all_peers:
+            peer.target_piece = None
 
     @classmethod
     def get_top_four(cls, peers: list[Peer]) -> list[Peer]:
@@ -117,7 +140,6 @@ class RarestFirstStrategy(Strategy):
                 has_pieces.append(piece)
             if len(has_pieces) == NUM_RAREST_PIECES:
                 break
-        # bugfix: we wanted to check if has_pieces was not empty, this accomplishes that
         return choice(has_pieces) if has_pieces else None
 
     @classmethod
@@ -134,7 +156,43 @@ class RarestFirstStrategy(Strategy):
 
 
 class PropShareStrategy(Strategy):
-    pass
+    def __init__(self):
+        self.upload_bandwidth = 0  # Bytes uploaded last epoch
+
+    def choose_peers(self, peers: list[Peer], upload_speed, download_speed) -> list[Peer]:
+        # Determine available upload_bandwidth.
+        self.upload_bandwidth = upload_speed * EPOCH_DURATION_SECS
+        # Unchoke any peer who uploaded to us in the last epoch.
+        interested = [peer for peer in peers if peer.peer_interested]
+        unchoke = []
+        for peer in interested:
+            if peer.bytes_received > 0:
+                unchoke.append(peer)
+                # Assign a proportional upload allotment.
+                peer.allotment = int(peer.last_bytes_received / self.upload_bandwidth)
+        return unchoke
+
+    def fulfill_requests(self, peers: list[Peer], file: File):
+        for peer in peers:
+            # Allotment variable will be used per epoch instead of per method invocation.
+            # Will represent the proportion of upload bandwidth to dedicate to client [0,1].
+            requests_per_iteration = 16
+            for block_request in peer.incoming_requests[:requests_per_iteration]:
+                index, offset, length = block_request
+                peer.allotment -= length  # Decrement allotment whether or not request is successful.
+                if peer.allotment < 0:
+                    # Do not remove from requests.
+                    break
+                data_to_send = file.get_data_from_piece(offset, length, index)
+                if data_to_send == 0:  # Issue retrieving data
+                    peer.incoming_requests.pop(0)
+                    continue
+                flag = peer.send_piece(index, offset, data_to_send)
+                if flag == Status.SUCCESS:
+                    file.total_uploaded += length / 1024  # Update total uploaded
+                    logger.debug(f"Data successfully sent to {peer.addr}")
+                else:
+                    logger.debug(f"Data failed to send to {peer.addr}")
 
 
 class RandomStrategy(Strategy):

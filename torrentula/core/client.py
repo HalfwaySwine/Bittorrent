@@ -140,17 +140,10 @@ class Client:
             loopback_peer = Peer(LOOPBACK_IP, port, self.info_hash, self.peer_id, len(self.file.bitfield))
             self.peers.append(loopback_peer)
             logger.info(f"Added loopback peer: {loopback_peer.display_peer()}")
-        # track_while_loop_delta = datetime.now()
         # Main event loop
         while not self.file.complete():
             if self.window:
                 self.tui.update_display(self.progress)
-
-            # # only uncomment if you need it, will flood log
-            # while_loop_delta_2 = datetime.now()
-            # logger.error(f"Time of while loop: {while_loop_delta_2 - track_while_loop_delta}")
-            # track_while_loop_delta = while_loop_delta_2
-
             self.add_peers()
             self.accept_peers()
             self.receive_messages()
@@ -162,7 +155,7 @@ class Client:
                 self.send_uninterested()
             self.send_haves(completed_pieces)
             self.send_requests()
-            self.send_requests_reponses_back()
+            self.fulfill_requests()
             self.send_keepalives()
             self.send_interested()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
@@ -196,7 +189,7 @@ class Client:
                 self.repaint_seeding()
             self.accept_peers()
             self.receive_messages()
-            self.send_requests_reponses_back()
+            self.fulfill_requests()
             self.send_keepalives()
             if datetime.now() - self.epoch_start_time >= timedelta(seconds=EPOCH_DURATION_SECS):
                 self.cleanup_peers()
@@ -235,7 +228,7 @@ class Client:
 
     def execute_choke_transition(self):
         currently_unchoked = [peer for peer in self.peers if not peer.am_choking]
-        to_unchoke = self.strategy.choose_peers(self.connected_peers())
+        to_unchoke = self.strategy.choose_peers(self.peers, self.upload_speed, self.download_speed)
         for peer in to_unchoke:
             peer.unchoke()
         choke = [peer for peer in currently_unchoked if peer not in to_unchoke]
@@ -296,23 +289,12 @@ class Client:
     def connected_peers(self):
         return [peer for peer in self.peers if peer.tcp_established and peer.received_handshake == Handshake.HANDSHAKE_RECVD]
 
-    def send_requests_reponses_back(self):
+    def fulfill_requests(self):
         """
         Sends data to pieces who are unchoked and have requested data
         """
-        for peer in self.peers:
-            if peer.am_choking == False:
-                if len(peer.incoming_requests) > 0:
-                    data = peer.incoming_requests[0]
-                    dataToSend = self.file.get_data_from_piece(data[1], data[2], data[0])
-                    if dataToSend == 0:  # Issue getting data
-                        continue
-                    flag = peer.send_piece(data[0], data[1], dataToSend)
-                    if flag == Status.SUCCESS:
-                        self.file.total_uploaded += data[2]  # update total uploaded
-                        logger.debug(f"Data send back to {peer.addr} successfully")
-                    else:  # failed
-                        logger.debug(f"Data failed to send back to {peer.addr}")
+        unchoked = [peer for peer in self.connected_peers() if not peer.am_choking and peer.incoming_requests]
+        self.strategy.fulfill_requests(unchoked, self.file)
 
     def send_keepalives(self):
         for peer in self.peers:

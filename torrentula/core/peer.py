@@ -63,8 +63,8 @@ class Peer:
         if progress == 100:
             return "Seeder"
         elif self.get_state() not in (PeerState.DISCONNECTED, PeerState.DATA_TRANSFER):
-            return "---" # Created, Accepted, or Handshaking
-        elif self.bitfield is not None: # Currently connected or have been.
+            return "---"  # Created, Accepted, or Handshaking
+        elif self.bitfield is not None:  # Currently connected or have been.
             return f"Leecher ({progress:.2f}%)"
 
     def get_state(self):
@@ -144,8 +144,9 @@ class Peer:
         self.bytes_sent = 0
         self.total_bytes_received = 0
         self.total_bytes_sent = 0
-        self.kilobytes_received = 0 # Never reset
-        self.kilobytes_sent = 0 # Never reset
+        self.kilobytes_received = 0  # Never reset
+        self.kilobytes_sent = 0  # Never reset
+        self.allotment = 0
         self.download_speed = 0
         self.upload_speed = 0
         self.is_seeder = False
@@ -573,7 +574,6 @@ class Peer:
         return self.send_msg(msg)
 
     def send_keepalive_if_needed(self):
-        # we should send if half the disconnect time has elapsed probably
         if not self.tcp_established or datetime.now() - self.last_sent <= timedelta(seconds=PEER_INACTIVITY_TIMEOUT_SECS) / 2:
             return  # Keepalive is not necessary
         else:
@@ -581,10 +581,12 @@ class Peer:
 
     def establish_new_epoch(self):
         res = (self.bytes_received, self.bytes_sent)
-        self.download_speed = self.bytes_received / 10240  # Convert to KB/s and average over last epoch
+        self.download_speed = self.bytes_received / 10240  # Convert to KB/s and average over last epoch.
         self.upload_speed = self.bytes_sent / 10240
         self.total_bytes_received += self.bytes_received
         self.total_bytes_sent += self.bytes_sent
+        self.last_bytes_received = self.bytes_received  # Track last epoch statistics for strategy.
+        self.last_bytes_sent = self.bytes_sent
         self.bytes_received = 0
         self.bytes_sent = 0
         return res
@@ -628,4 +630,18 @@ class Peer:
     @staticmethod
     def display_headers():
         # Stats per epoch
-        return ("IP Address", "Port", "Type", "Interest", "Choke", "Downloaded (KB)", "Speed (KB/S)", "Peer Interest", "Choke", "Uploaded (KB)", "Speed (KB/S)", "Piece", "Requests")
+        return (
+            "IP Address",
+            "Port",
+            "Type",
+            "Interest",
+            "Choke",
+            "Downloaded (KB)",
+            "Speed (KB/S)",
+            "Peer Interest",
+            "Choke",
+            "Uploaded (KB)",
+            "Speed (KB/S)",
+            "Piece",
+            "Requests",
+        )

@@ -19,7 +19,7 @@ class File:
             self.remove_artifacts()
         self.length = length
         self.initialize_file()
-        self.total_uploaded = 0  # In bytes
+        self.total_uploaded = 0  # In kilobytes
         self.initialize_pieces()
         self.bitfield: list[int] = self.load_bitfield_from_disk()
         self.initialize_missing_pieces()
@@ -203,7 +203,7 @@ class File:
 
     def bytes_uploaded(self):
         logger.debug(f"{self.total_uploaded} bytes uploaded")
-        return self.total_uploaded
+        return self.total_uploaded * 1_024
 
     def bytes_downloaded_unverified(self):
         """
