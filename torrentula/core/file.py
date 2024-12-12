@@ -2,12 +2,12 @@ from .piece import Piece
 from math import ceil
 from pathlib import Path
 import os
-from ..config import BITFIELD_FILE_SUFFIX, IN_PROGRESS_FILENAME_SUFFIX, ENDGAME_CUTOFF_PERCENT
+from ..config import BITFIELD_FILE_SUFFIX, IN_PROGRESS_FILENAME_SUFFIX, ENDGAME_THRESHOLD
 from ..utils.helpers import logger
 
 
 class File:
-    def __init__(self, name, destination, length, piece_length, hashes, clean=False, endgame_threshold=ENDGAME_CUTOFF_PERCENT):
+    def __init__(self, name, destination, length, piece_length, hashes, clean=False, endgame_threshold=ENDGAME_THRESHOLD):
         self.piece_length = piece_length
         self.name = name
         self.destination = destination
